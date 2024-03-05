@@ -61,8 +61,8 @@ pub struct TaskFC {
     pub total_time: Option<String>, // e.g. "00:30:00" if we want to track 30 minutes spent on the task
 }
 
-impl Task {
-    pub fn new(model_fc: TaskFC) -> Self {
+impl From<TaskFC> for Task {
+    fn from(model_fc: TaskFC) -> Task {
         Self {
             pk: model_fc.pk,
             sk: get_today_datetime(),
@@ -83,7 +83,7 @@ impl Task {
 // DynamoDB handlers
 impl Task {
     pub async fn ddb_create(client: Client, table_name: String, task_fc: TaskFC) -> AResult<()> {
-        let model = Task::new(task_fc);
+        let model: Task = task_fc.into();
         let item = to_item(model)?;
 
         let req = client
