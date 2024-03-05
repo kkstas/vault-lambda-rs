@@ -28,7 +28,8 @@ async fn main() -> std::result::Result<(), Error> {
 
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1/entry", web::task::routes::router(db_client));
+        .nest("/api/v1/task", web::task::routes::router(db_client.clone()))
+        .nest("/api/v1/tasklist", web::tasklist::routes::router(db_client));
 
     run(app).await
 }
