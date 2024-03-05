@@ -1,30 +1,38 @@
-use lambda_http::{run, service_fn, tracing, Body, Error, Request, RequestExt, Response};
+use aws_config::BehaviorVersion;
+use aws_sdk_dynamodb::Client;
+use axum::http::StatusCode;
+use axum::{routing::get, Router};
+use lambda_http::{run, tracing, Error};
+use std::env::set_var;
 
-/// This is the main body for the function.
-/// Write your code inside it.
-/// There are some code example in the following URLs:
-/// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
-async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
-    // Extract some useful information from the request
-    let who = event
-        .query_string_parameters_ref()
-        .and_then(|params| params.first("name"))
-        .unwrap_or("world");
-    let message = format!("Hello {who}, this is an AWS Lambda HTTP request");
+pub mod error;
+pub mod web;
 
-    // Return something that implements IntoResponse.
-    // It will be serialized to the right response event automatically by the runtime
-    let resp = Response::builder()
-        .status(200)
-        .header("content-type", "text/html")
-        .body(message.into())
-        .map_err(Box::new)?;
-    Ok(resp)
-}
+pub use error::{AError, AResult};
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> std::result::Result<(), Error> {
+    let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+    let db_client = Client::new(&config);
+
+    // If you use API Gateway stages, the Rust Runtime will include the stage name
+    // as part of the path that your application receives.
+    // Setting the following environment variable, you can remove the stage from the path.
+    // This variable only applies to API Gateway stages,
+    // you can remove it if you don't use them.
+    // i.e with: `GET /test-stage/todo/id/123` without: `GET /todo/id/123`
+    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+
+    // required to enable CloudWatch error logging by the runtime
     tracing::init_default_subscriber();
 
-    run(service_fn(function_handler)).await
+    let app = Router::new()
+        .route("/health", get(health_check))
+        .nest("/api/v1/entry", web::task::routes::router(db_client));
+
+    run(app).await
+}
+
+async fn health_check() -> StatusCode {
+    StatusCode::OK
 }
