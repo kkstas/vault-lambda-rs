@@ -3,6 +3,8 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Extension, Json, Router};
+use chrono::{Duration, FixedOffset, Utc};
+use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::model::{Task, TaskFC};
@@ -14,31 +16,42 @@ use crate::AResult;
 pub fn router(db_client: Client) -> Router {
     Router::new()
         .route("/", post(create))
+        .route("/last-week", get(find_last_week))
         .route("/:pk/:sk", delete(delete_task))
         .route("/:pk/:sk", get(query))
         .layer(Extension(db_client))
 }
 
-async fn find_all_from_last_period(
+#[derive(Serialize)]
+struct ProtoWithTasks {
+    proto: TaskProto,
+    tasks: Vec<Task>,
+}
+
+async fn find_last_week(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
     let active_task_list_entries =
         TaskProto::ddb_list_active(db_client.clone(), TASKPROTO_TABLE_NAME.to_string()).await?;
 
-    // TODO: compute real date_from
-    let date_from = String::from("2024-03-06");
-    let mut result_tasks: Vec<Task> = Vec::new();
+    let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
+    let week_ago = (Utc::now().with_timezone(&tz_offset) + Duration::days(-7))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let mut result_tasks: Vec<ProtoWithTasks> = Vec::new();
 
     for task_list_entry in active_task_list_entries {
         let t: Vec<Task> = Task::ddb_query(
             db_client.clone(),
             TABLE_NAME.to_string(),
             task_list_entry.sk.clone(),
-            date_from.clone(),
+            week_ago.clone(),
         )
         .await?;
-        t.iter().for_each(|task| {
-            result_tasks.push(task.clone());
+        result_tasks.push(ProtoWithTasks {
+            proto: task_list_entry,
+            tasks: t,
         });
     }
 
