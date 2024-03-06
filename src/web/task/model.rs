@@ -102,6 +102,9 @@ impl Task {
         sk: String,
     ) -> AResult<()> {
         // TODO: if pk starts with "Task::" allow deletion
+        if !pk.starts_with("Task::") {
+            return Err(anyhow::Error::msg("Invalid Task sort key").into());
+        }
         let req = client
             .delete_item()
             .table_name(table_name)

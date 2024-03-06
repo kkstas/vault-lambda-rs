@@ -55,14 +55,14 @@ impl TaskListEntry {
         table_name: String,
         task_list_entry_fc: TaskListEntryFC,
     ) -> AResult<()> {
-        let active_query_res = TaskListEntry::find(
+        let active_query_res = TaskListEntry::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskList::Active"),
             task_list_entry_fc.sk.clone(),
         )
         .await?;
-        let inactive_query_res = TaskListEntry::find(
+        let inactive_query_res = TaskListEntry::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskList::Inactive"),
@@ -86,14 +86,14 @@ impl TaskListEntry {
         table_name: String,
         task_list_entry_fu: TaskListEntryFC,
     ) -> AResult<()> {
-        let active_query_res = TaskListEntry::find(
+        let active_query_res = TaskListEntry::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskList::Active"),
             task_list_entry_fu.sk.clone(),
         )
         .await?;
-        let inactive_query_res = TaskListEntry::find(
+        let inactive_query_res = TaskListEntry::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskList::Inactive"),
@@ -136,26 +136,11 @@ impl TaskListEntry {
         TaskListEntry::ddb_put_item(client, table_name, task_list_entry).await?;
         return Ok(());
     }
-
-    pub async fn find(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<Vec<TaskListEntry>> {
-        TaskListEntry::ddb_find(client, table_name, pk, sk).await
-    }
-    pub async fn list_active(client: Client, table_name: String) -> AResult<Vec<TaskListEntry>> {
-        TaskListEntry::ddb_list_active(client, table_name).await
-    }
-    pub async fn list_inactive(client: Client, table_name: String) -> AResult<Vec<TaskListEntry>> {
-        TaskListEntry::ddb_list_inactive(client, table_name).await
-    }
 }
 
 // Functions for direct interaction with DynamoDB
 impl TaskListEntry {
-    async fn ddb_find(
+    pub async fn ddb_find(
         client: Client,
         table_name: String,
         pk: String,

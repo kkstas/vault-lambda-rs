@@ -12,18 +12,18 @@ use crate::AResult;
 pub fn router(db_client: Client) -> Router {
     Router::new()
         .route("/", post(create))
-        .route("/:pk/:sk", get(query))
+        .route("/:pk/:sk", get(find))
         .route("/active", get(list_active))
         .route("/inactive", get(list_inactive))
         .route("/", put(update))
         .layer(Extension(db_client))
 }
 
-async fn query(
+async fn find(
     Extension(db_client): Extension<Client>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::find(db_client, TABLE_NAME.to_string(), pk, sk).await?;
+    let response = TaskListEntry::ddb_find(db_client, TABLE_NAME.to_string(), pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
@@ -48,12 +48,12 @@ async fn update(
 async fn list_active(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::list_active(db_client, TABLE_NAME.to_string()).await?;
+    let response = TaskListEntry::ddb_list_active(db_client, TABLE_NAME.to_string()).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 async fn list_inactive(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::list_inactive(db_client, TABLE_NAME.to_string()).await?;
+    let response = TaskListEntry::ddb_list_inactive(db_client, TABLE_NAME.to_string()).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
