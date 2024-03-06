@@ -83,6 +83,10 @@ impl From<TaskFC> for Task {
 // DynamoDB handlers
 impl Task {
     pub async fn ddb_create(client: Client, table_name: String, task_fc: TaskFC) -> AResult<()> {
+        // sprawdź czy streak ma reps.
+        // Jeśli nie, to sprawdź czy istnieje już task o takim pk i z tego dnia -> error jeśli istnieje już
+        // Jeśli streak ma reps, to nie musisz sprawdzać czy z dziś już jakiś istnieje
+
         let model: Task = task_fc.into();
         let item = to_item(model)?;
 

@@ -5,8 +5,8 @@ use serde_dynamo::{from_items, to_item};
 use crate::AResult;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TaskListEntry {
-    pub pk: String,            // "TaskList::Inactive" || "TaskList::Active"
+pub struct TaskProto {
+    pub pk: String,            // "TaskProto::Inactive" || "TaskProto::Active"
     pub sk: String,            // Primary key of referenced task, e.g. "Task::Workout"
     pub readable_name: String, // Readable name of referenced task, e.g. "Workout"
     pub has_description: bool,
@@ -20,7 +20,7 @@ pub struct TaskListEntry {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TaskListEntryFC {
+pub struct TaskProtoFC {
     pub sk: String,            // Primary key of referenced task, e.g. "Task::Workout"
     pub readable_name: String, // Readable name of referenced task, e.g. "Workout"
     pub has_description: bool,
@@ -33,8 +33,8 @@ pub struct TaskListEntryFC {
     pub is_timed: bool,
 }
 
-impl TaskListEntry {
-    pub fn new(t_fc: TaskListEntryFC, pk: String) -> Self {
+impl TaskProto {
+    pub fn new(t_fc: TaskProtoFC, pk: String) -> Self {
         Self {
             pk,
             sk: t_fc.sk,
@@ -49,54 +49,54 @@ impl TaskListEntry {
     }
 }
 
-impl TaskListEntry {
+impl TaskProto {
     pub async fn create(
         client: Client,
         table_name: String,
-        task_list_entry_fc: TaskListEntryFC,
+        task_list_entry_fc: TaskProtoFC,
     ) -> AResult<()> {
-        let active_query_res = TaskListEntry::ddb_find(
+        let active_query_res = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
-            String::from("TaskList::Active"),
+            String::from("TaskProto::Active"),
             task_list_entry_fc.sk.clone(),
         )
         .await?;
-        let inactive_query_res = TaskListEntry::ddb_find(
+        let inactive_query_res = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
-            String::from("TaskList::Inactive"),
+            String::from("TaskProto::Inactive"),
             task_list_entry_fc.sk.clone(),
         )
         .await?;
         if active_query_res.is_empty() && inactive_query_res.is_empty() {
-            TaskListEntry::ddb_put_item(
+            TaskProto::ddb_put_item(
                 client,
                 table_name,
-                TaskListEntry::new(task_list_entry_fc, "TaskList::Active".to_string()),
+                TaskProto::new(task_list_entry_fc, "TaskProto::Active".to_string()),
             )
             .await?;
             return Ok(());
         }
-        return Err(anyhow::Error::msg("TaskListEntry with given sort key already exists").into());
+        return Err(anyhow::Error::msg("TaskProto with given sort key already exists").into());
     }
 
     pub async fn update(
         client: Client,
         table_name: String,
-        task_list_entry_fu: TaskListEntryFC,
+        task_list_entry_fu: TaskProtoFC,
     ) -> AResult<()> {
-        let active_query_res = TaskListEntry::ddb_find(
+        let active_query_res = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
-            String::from("TaskList::Active"),
+            String::from("TaskProto::Active"),
             task_list_entry_fu.sk.clone(),
         )
         .await?;
-        let inactive_query_res = TaskListEntry::ddb_find(
+        let inactive_query_res = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
-            String::from("TaskList::Inactive"),
+            String::from("TaskProto::Inactive"),
             task_list_entry_fu.sk.clone(),
         )
         .await?;
@@ -105,57 +105,54 @@ impl TaskListEntry {
         let inactive_empty = inactive_query_res.is_empty();
 
         if active_empty && inactive_empty {
-            return Err(
-                anyhow::Error::msg("TaskListEntry with given sort key does not exist").into(),
-            );
+            return Err(anyhow::Error::msg("TaskProto with given sort key does not exist").into());
         }
         if !active_empty && !inactive_empty {
-            return Err(anyhow::Error::msg("Corrupted data - TaskListEntry with given sort key exists in both active and inactive lists").into());
+            return Err(anyhow::Error::msg("Corrupted data - TaskProto with given sort key exists in both active and inactive lists").into());
         }
 
         if active_query_res.len() > 1 {
             return Err(anyhow::Error::msg(
-                "Corrupted data - there is more than one active TaskListEntry with that sort key",
+                "Corrupted data - there is more than one active TaskProto with that sort key",
             )
             .into());
         }
 
         if inactive_query_res.len() > 1 {
             return Err(anyhow::Error::msg(
-                "Corrupted data - there is more than one inactive TaskListEntry with that sort key",
+                "Corrupted data - there is more than one inactive TaskProto with that sort key",
             )
             .into());
         }
         let task_list_entry_state = if !active_empty {
-            String::from("TaskList::Active")
+            String::from("TaskProto::Active")
         } else {
-            String::from("TaskList::Inactive")
+            String::from("TaskProto::Inactive")
         };
 
-        let task_list_entry = TaskListEntry::new(task_list_entry_fu, task_list_entry_state);
-        TaskListEntry::ddb_put_item(client, table_name, task_list_entry).await?;
+        let task_list_entry = TaskProto::new(task_list_entry_fu, task_list_entry_state);
+        TaskProto::ddb_put_item(client, table_name, task_list_entry).await?;
         return Ok(());
     }
 }
 
 // Functions for direct interaction with DynamoDB
-impl TaskListEntry {
+impl TaskProto {
     pub async fn ddb_find(
         client: Client,
         table_name: String,
         pk: String,
         sk: String,
-    ) -> AResult<Vec<TaskListEntry>> {
-        if (pk != "TaskList::Active") && (pk != "TaskList::Inactive") {
-            return Err(anyhow::Error::msg(
-                "Invalid TaskListEntry query partition key argument. {:?}",
-            )
-            .into());
+    ) -> AResult<Vec<TaskProto>> {
+        if (pk != "TaskProto::Active") && (pk != "TaskProto::Inactive") {
+            return Err(
+                anyhow::Error::msg("Invalid TaskProto query partition key argument. {:?}").into(),
+            );
         }
 
         if !sk.starts_with("Task::") {
             return Err(
-                anyhow::Error::msg("Invalid TaskListEntry query sort key argument. {:?}").into(),
+                anyhow::Error::msg("Invalid TaskProto query sort key argument. {:?}").into(),
             );
         }
         let query = client
@@ -168,7 +165,7 @@ impl TaskListEntry {
         let res = query.send().await?;
         match res.items {
             Some(items) => {
-                let tasks: Vec<TaskListEntry> = from_items(items)?;
+                let tasks: Vec<TaskProto> = from_items(items)?;
                 return Ok(tasks);
             }
             None => {
@@ -180,15 +177,15 @@ impl TaskListEntry {
     async fn ddb_put_item(
         client: Client,
         table_name: String,
-        task_list_entry: TaskListEntry,
+        task_list_entry: TaskProto,
     ) -> AResult<()> {
-        if (task_list_entry.pk != "TaskList::Active")
-            && (task_list_entry.pk != "TaskList::Inactive")
+        if (task_list_entry.pk != "TaskProto::Active")
+            && (task_list_entry.pk != "TaskProto::Inactive")
         {
-            return Err(anyhow::Error::msg("Invalid TaskListEntry partition key. {:?}").into());
+            return Err(anyhow::Error::msg("Invalid TaskProto partition key. {:?}").into());
         }
         if !task_list_entry.sk.starts_with("Task::") {
-            return Err(anyhow::Error::msg("Invalid TaskListEntry sort key. {:?}").into());
+            return Err(anyhow::Error::msg("Invalid TaskProto sort key. {:?}").into());
         }
 
         let item = to_item(task_list_entry)?;
@@ -202,20 +199,17 @@ impl TaskListEntry {
         Ok(())
     }
 
-    pub async fn ddb_list_active(
-        client: Client,
-        table_name: String,
-    ) -> AResult<Vec<TaskListEntry>> {
+    pub async fn ddb_list_active(client: Client, table_name: String) -> AResult<Vec<TaskProto>> {
         let query = client
             .query()
             .table_name(table_name)
             .key_condition_expression("pk = :pk")
-            .expression_attribute_values(":pk", AttributeValue::S("TaskList::Active".to_string()));
+            .expression_attribute_values(":pk", AttributeValue::S("TaskProto::Active".to_string()));
 
         let res = query.send().await?;
         match res.items {
             Some(items) => {
-                let tasks: Vec<TaskListEntry> = from_items(items)?;
+                let tasks: Vec<TaskProto> = from_items(items)?;
                 return Ok(tasks);
             }
             None => {
@@ -224,23 +218,20 @@ impl TaskListEntry {
         }
     }
 
-    pub async fn ddb_list_inactive(
-        client: Client,
-        table_name: String,
-    ) -> AResult<Vec<TaskListEntry>> {
+    pub async fn ddb_list_inactive(client: Client, table_name: String) -> AResult<Vec<TaskProto>> {
         let query = client
             .query()
             .table_name(table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",
-                AttributeValue::S("TaskList::Inactive".to_string()),
+                AttributeValue::S("TaskProto::Inactive".to_string()),
             );
 
         let res = query.send().await?;
         match res.items {
             Some(items) => {
-                let tasks: Vec<TaskListEntry> = from_items(items)?;
+                let tasks: Vec<TaskProto> = from_items(items)?;
                 return Ok(tasks);
             }
             None => {

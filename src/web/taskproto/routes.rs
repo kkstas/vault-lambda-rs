@@ -5,7 +5,7 @@ use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router};
 use serde_json::{json, Value};
 
-use super::model::{TaskListEntry, TaskListEntryFC};
+use super::model::{TaskProto, TaskProtoFC};
 use super::TABLE_NAME;
 use crate::AResult;
 
@@ -23,24 +23,24 @@ async fn find(
     Extension(db_client): Extension<Client>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::ddb_find(db_client, TABLE_NAME.to_string(), pk, sk).await?;
+    let response = TaskProto::ddb_find(db_client, TABLE_NAME.to_string(), pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn create(
     Extension(client): Extension<Client>,
-    Json(payload): Json<TaskListEntryFC>,
+    Json(payload): Json<TaskProtoFC>,
 ) -> AResult<StatusCode> {
-    TaskListEntry::create(client, TABLE_NAME.to_string(), payload.clone()).await?;
+    TaskProto::create(client, TABLE_NAME.to_string(), payload.clone()).await?;
 
     return Ok(StatusCode::CREATED);
 }
 
 async fn update(
     Extension(client): Extension<Client>,
-    Json(payload): Json<TaskListEntryFC>,
+    Json(payload): Json<TaskProtoFC>,
 ) -> AResult<StatusCode> {
-    TaskListEntry::update(client, TABLE_NAME.to_string(), payload.clone()).await?;
+    TaskProto::update(client, TABLE_NAME.to_string(), payload.clone()).await?;
 
     return Ok(StatusCode::CREATED);
 }
@@ -48,12 +48,12 @@ async fn update(
 async fn list_active(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::ddb_list_active(db_client, TABLE_NAME.to_string()).await?;
+    let response = TaskProto::ddb_list_active(db_client, TABLE_NAME.to_string()).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 async fn list_inactive(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskListEntry::ddb_list_inactive(db_client, TABLE_NAME.to_string()).await?;
+    let response = TaskProto::ddb_list_inactive(db_client, TABLE_NAME.to_string()).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }

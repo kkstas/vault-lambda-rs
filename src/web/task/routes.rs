@@ -7,8 +7,8 @@ use serde_json::{json, Value};
 
 use super::model::{Task, TaskFC};
 use super::TABLE_NAME;
-use crate::web::tasklist::model::TaskListEntry;
-use crate::web::tasklist::TABLE_NAME as TASKLIST_TABLE_NAME;
+use crate::web::taskproto::model::TaskProto;
+use crate::web::taskproto::TABLE_NAME as TASKPROTO_TABLE_NAME;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {
@@ -23,7 +23,7 @@ async fn find_all_from_last_period(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
     let active_task_list_entries =
-        TaskListEntry::ddb_list_active(db_client.clone(), TASKLIST_TABLE_NAME.to_string()).await?;
+        TaskProto::ddb_list_active(db_client.clone(), TASKPROTO_TABLE_NAME.to_string()).await?;
 
     // TODO: compute real date_from
     let date_from = String::from("2024-03-06");
