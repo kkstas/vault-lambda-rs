@@ -15,9 +15,18 @@ pub fn router(db_client: Client) -> Router {
         .route("/:pk/:sk", get(find))
         .route("/active", get(list_active))
         .route("/inactive", get(list_inactive))
+        .route("/active/:sk", put(set_as_active))
         .route("/inactive/:sk", put(set_as_inactive))
         .route("/", put(update))
         .layer(Extension(db_client))
+}
+
+async fn set_as_active(
+    Extension(client): Extension<Client>,
+    Path(sk): Path<String>,
+) -> AResult<StatusCode> {
+    TaskProto::set_as_active(client, TABLE_NAME.to_string(), sk).await?;
+    return Ok(StatusCode::CREATED);
 }
 
 async fn set_as_inactive(

@@ -50,6 +50,42 @@ impl TaskProto {
 }
 
 impl TaskProto {
+    pub async fn set_as_active(client: Client, table_name: String, sk: String) -> AResult<()> {
+        let found_inactive_task_arr = TaskProto::ddb_find(
+            client.clone(),
+            table_name.clone(),
+            String::from("TaskProto::Inactive"),
+            sk.clone(),
+        )
+        .await?;
+        if found_inactive_task_arr.is_empty() {
+            return Err(anyhow::Error::msg(
+                "Inactive TaskProto with given sort key does not exist",
+            )
+            .into());
+        }
+        let mut found_inactive_task: TaskProto = found_inactive_task_arr.first().unwrap().clone();
+
+        let found_active_task_arr = TaskProto::ddb_find(
+            client.clone(),
+            table_name.clone(),
+            String::from("TaskProto::Active"),
+            sk.clone(),
+        )
+        .await?;
+
+        if !found_active_task_arr.is_empty() {
+            return Err(
+                anyhow::Error::msg("Active TaskProto with given sort key already exists").into(),
+            );
+        }
+
+        found_inactive_task.pk = String::from("TaskProto::Active");
+        TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_inactive_task).await?;
+        TaskProto::ddb_delete(client, table_name, String::from("TaskProto::Inactive"), sk).await?;
+        Ok(())
+    }
+
     pub async fn set_as_inactive(client: Client, table_name: String, sk: String) -> AResult<()> {
         let found_task_arr = TaskProto::ddb_find(
             client.clone(),
@@ -59,11 +95,13 @@ impl TaskProto {
         )
         .await?;
         if found_task_arr.is_empty() {
-            return Err(anyhow::Error::msg("TaskProto with given sort key does not exist").into());
+            return Err(
+                anyhow::Error::msg("Active TaskProto with given sort key does not exist").into(),
+            );
         }
         let mut found_task: TaskProto = found_task_arr.first().unwrap().clone();
 
-        let found_inactive_task = TaskProto::ddb_find(
+        let found_inactive_task_arr = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Inactive"),
@@ -71,7 +109,7 @@ impl TaskProto {
         )
         .await?;
 
-        if !found_inactive_task.is_empty() {
+        if !found_inactive_task_arr.is_empty() {
             return Err(anyhow::Error::msg(
                 "Inactive TaskProto with given sort key already exists",
             )
