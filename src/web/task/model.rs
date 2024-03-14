@@ -94,7 +94,13 @@ impl Task {
             .await?;
 
             if task_proto.has_reps == true {
-                task_to_create.streak = Some(0);
+                let current_rep_data = Task::compute_reps_streak(
+                    task_proto.daily_reps_minimum.unwrap(),
+                    task_proto.weekly_streak_tolerance.unwrap(),
+                    last_week_tasks.clone(),
+                )?;
+                task_to_create.streak = Some(current_rep_data.streak);
+                task_to_create.rep_number = Some(current_rep_data.rep_number);
             } else {
                 // If task is not repeatable, don't let it be created if one already exists for today
                 for task in last_week_tasks.iter() {
@@ -171,8 +177,100 @@ impl Task {
     }
 }
 
+#[derive(Debug)]
+struct RepTaskDaySummary {
+    date: String,
+    streak: u32,
+}
+
+#[derive(Debug)]
+struct CurrentRepData {
+    streak: u32,
+    rep_number: u8,
+}
+
 // helper functions
 impl Task {
+    fn get_streaks_with_reps_week_summary(
+        daily_rep_minimum: u8,
+        last_week_tasks: Vec<Task>,
+    ) -> Vec<RepTaskDaySummary> {
+        let mut summary: Vec<RepTaskDaySummary> = Vec::new();
+
+        for day in 1..7 {
+            let date = get_date_x_days_ago(day as i64);
+
+            let tasks_that_day: Vec<Task> = last_week_tasks
+                .iter()
+                .filter(|task| task.sk.starts_with(&date))
+                .cloned()
+                .collect();
+
+            if tasks_that_day.len() >= daily_rep_minimum as usize {
+                let mut streak_that_day = 0;
+                // find streak that day
+                for task in tasks_that_day.iter() {
+                    if task.streak.unwrap() >= streak_that_day {
+                        streak_that_day = task.streak.unwrap();
+                    }
+                }
+
+                summary.push(RepTaskDaySummary {
+                    date: date.clone(),
+                    streak: streak_that_day,
+                });
+            }
+        }
+        summary
+    }
+
+    fn compute_reps_streak(
+        daily_rep_minimum: u8,
+        weekly_streak_tolerance: u8,
+        last_week_tasks: Vec<Task>,
+    ) -> AResult<CurrentRepData> {
+        let mut last_found_streak: u32 = 0; // streak starts at 0 if there are no tasks for the last 7 days & today's tasks are less than daily_rep_minimum
+        let mut today_streak_point: u32 = 0;
+
+        let summary: Vec<RepTaskDaySummary> =
+            Task::get_streaks_with_reps_week_summary(daily_rep_minimum, last_week_tasks.clone());
+
+        for day in 0..weekly_streak_tolerance {
+            let date = get_date_x_days_ago(day as i64);
+
+            if let Some(t) = summary.iter().find(|task| task.date == date) {
+                last_found_streak = t.streak;
+                break;
+            }
+        }
+
+        let today_tasks: Vec<Task> = last_week_tasks
+            .iter()
+            .filter(|task| task.sk.starts_with(&get_date_x_days_ago(0)))
+            .cloned()
+            .collect();
+
+        let todays_rep_count_enough_for_streak =
+            today_tasks.len() + 1 >= daily_rep_minimum as usize;
+
+        if todays_rep_count_enough_for_streak {
+            today_streak_point = 1;
+        }
+
+        let min_len = 7 - weekly_streak_tolerance;
+        if last_found_streak > min_len.into() && ((summary.len() + 1) as u8) < min_len {
+            return Ok(CurrentRepData {
+                streak: last_found_streak + today_streak_point,
+                rep_number: today_tasks.len() as u8 + 1,
+            });
+        }
+
+        Ok(CurrentRepData {
+            streak: last_found_streak + today_streak_point,
+            rep_number: today_tasks.len() as u8 + 1,
+        })
+    }
+
     fn compute_non_reps_streak(
         weekly_streak_tolerance: u8,
         last_week_tasks: Vec<Task>,
@@ -221,6 +319,95 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_compute_reps_streak() {
+        let mut t0 = Task::default();
+        t0.streak = Some(6);
+        t0.rep_number = Some(1);
+        t0.sk = get_date_x_days_ago(0);
+
+        let mut t1_1 = Task::default();
+        t1_1.streak = Some(5);
+        t1_1.rep_number = Some(1);
+        t1_1.sk = get_date_x_days_ago(2);
+
+        let mut t1_2 = Task::default();
+        t1_2.streak = Some(6);
+        t1_2.rep_number = Some(2);
+        t1_2.sk = get_date_x_days_ago(2);
+
+        let mut t1_3 = Task::default();
+        t1_3.streak = Some(6);
+        t1_3.rep_number = Some(3);
+        t1_3.sk = get_date_x_days_ago(2);
+
+        let mut t2_1 = Task::default();
+        t2_1.streak = Some(4);
+        t2_1.rep_number = Some(1);
+        t2_1.sk = get_date_x_days_ago(3);
+
+        let mut t2_2 = Task::default();
+        t2_2.streak = Some(5);
+        t2_2.rep_number = Some(2);
+        t2_2.sk = get_date_x_days_ago(3);
+
+        let mut t3_1 = Task::default();
+        t3_1.streak = Some(3);
+        t3_1.rep_number = Some(1);
+        t3_1.sk = get_date_x_days_ago(4);
+
+        let mut t3_2 = Task::default();
+        t3_2.streak = Some(4);
+        t3_2.rep_number = Some(2);
+        t3_2.sk = get_date_x_days_ago(4);
+
+        let v = vec![t0, t1_1, t1_2, t1_3, t2_1, t2_2, t3_1, t3_2];
+
+        let result = Task::compute_reps_streak(2, 3, v).unwrap();
+        assert_eq!(result.streak, 7);
+        assert_eq!(result.rep_number, 2);
+    }
+
+    #[test]
+    fn test_get_streaks_with_reps_week_summary() {
+        let mut t1_1 = Task::default();
+        t1_1.streak = Some(5);
+        t1_1.rep_number = Some(1);
+        t1_1.sk = get_date_x_days_ago(2);
+
+        let mut t1_2 = Task::default();
+        t1_2.streak = Some(6);
+        t1_2.rep_number = Some(2);
+        t1_2.sk = get_date_x_days_ago(2);
+
+        let mut t1_3 = Task::default();
+        t1_3.streak = Some(6);
+        t1_3.rep_number = Some(3);
+        t1_3.sk = get_date_x_days_ago(2);
+
+        let mut t2_1 = Task::default();
+        t2_1.streak = Some(4);
+        t2_1.rep_number = Some(1);
+        t2_1.sk = get_date_x_days_ago(3);
+
+        let mut t2_2 = Task::default();
+        t2_2.streak = Some(5);
+        t2_2.rep_number = Some(2);
+        t2_2.sk = get_date_x_days_ago(3);
+
+        let mut t3_1 = Task::default();
+        t3_1.streak = Some(4);
+        t3_1.rep_number = Some(1);
+        t3_1.sk = get_date_x_days_ago(4);
+
+        let v = vec![t1_1, t1_2, t1_3, t2_1, t2_2, t3_1];
+
+        let result = Task::get_streaks_with_reps_week_summary(2, v);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].streak, 6);
+        assert_eq!(result[1].streak, 5);
+    }
+
+    #[test]
     fn test_compute_non_reps_streak() {
         let mut t1 = Task::default();
         t1.streak = Some(6);
@@ -235,7 +422,6 @@ mod tests {
         t3.sk = get_date_x_days_ago(4);
 
         let v = vec![t1, t2, t3];
-        println!("{:#?}", v);
 
         assert_eq!(Task::compute_non_reps_streak(4, v.clone()).unwrap(), 7);
         assert_eq!(Task::compute_non_reps_streak(3, v.clone()).unwrap(), 1);

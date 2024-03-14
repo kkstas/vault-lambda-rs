@@ -70,6 +70,42 @@ impl TaskProto {
         )
         .await?;
         if active_query_res.is_empty() && inactive_query_res.is_empty() {
+            if !task_list_entry_fc.has_streak && task_list_entry_fc.has_reps {
+                return Err(anyhow::Error::msg(
+                    "TaskProto with reps must have 'has_streak' property set to true",
+                )
+                .into());
+            }
+
+            if task_list_entry_fc.has_streak && task_list_entry_fc.weekly_streak_tolerance.is_none()
+            {
+                return Err(anyhow::Error::msg(
+                    "TaskProto with streaks must have weekly_streak_tolerance",
+                )
+                .into());
+            }
+            if !task_list_entry_fc.has_streak
+                && task_list_entry_fc.weekly_streak_tolerance.is_some()
+            {
+                return Err(anyhow::Error::msg(
+                    "TaskProto without streaks must not have weekly_streak_tolerance",
+                )
+                .into());
+            }
+
+            if task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_none() {
+                return Err(
+                    anyhow::Error::msg("TaskProto with reps must have daily_reps_minimum").into(),
+                );
+            }
+
+            if !task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_some() {
+                return Err(anyhow::Error::msg(
+                    "TaskProto without reps must not have daily_reps_minimum",
+                )
+                .into());
+            }
+
             TaskProto::ddb_put_item(
                 client,
                 table_name,
