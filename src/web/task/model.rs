@@ -139,7 +139,7 @@ impl Task {
         sk: String,
     ) -> AResult<()> {
         if !pk.starts_with("Task::") {
-            return Err(anyhow::Error::msg("Invalid Task sort key").into());
+            return Err(anyhow::Error::msg("Invalid Task primary key").into());
         }
         let req = client
             .delete_item()

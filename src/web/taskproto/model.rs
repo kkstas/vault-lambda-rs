@@ -50,6 +50,40 @@ impl TaskProto {
 }
 
 impl TaskProto {
+    pub async fn set_as_inactive(client: Client, table_name: String, sk: String) -> AResult<()> {
+        let found_task_arr = TaskProto::ddb_find(
+            client.clone(),
+            table_name.clone(),
+            String::from("TaskProto::Active"),
+            sk.clone(),
+        )
+        .await?;
+        if found_task_arr.is_empty() {
+            return Err(anyhow::Error::msg("TaskProto with given sort key does not exist").into());
+        }
+        let mut found_task: TaskProto = found_task_arr.first().unwrap().clone();
+
+        let found_inactive_task = TaskProto::ddb_find(
+            client.clone(),
+            table_name.clone(),
+            String::from("TaskProto::Inactive"),
+            sk.clone(),
+        )
+        .await?;
+
+        if !found_inactive_task.is_empty() {
+            return Err(anyhow::Error::msg(
+                "Inactive TaskProto with given sort key already exists",
+            )
+            .into());
+        }
+
+        found_task.pk = String::from("TaskProto::Inactive");
+        TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_task).await?;
+        TaskProto::ddb_delete(client, table_name, String::from("TaskProto::Active"), sk).await?;
+        Ok(())
+    }
+
     pub async fn create(
         client: Client,
         table_name: String,
@@ -274,5 +308,22 @@ impl TaskProto {
                 return Err(anyhow::Error::msg("Error querying DynamoDB tasks. {:?}").into());
             }
         }
+    }
+
+    async fn ddb_delete(client: Client, table_name: String, pk: String, sk: String) -> AResult<()> {
+        if !pk.starts_with("TaskProto::") {
+            return Err(anyhow::Error::msg("Invalid TaskProto primary key").into());
+        }
+        if !sk.starts_with("Task::") {
+            return Err(anyhow::Error::msg("Invalid TaskProto sort key").into());
+        }
+        let req = client
+            .delete_item()
+            .table_name(table_name)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(sk));
+
+        req.send().await?;
+        Ok(())
     }
 }
