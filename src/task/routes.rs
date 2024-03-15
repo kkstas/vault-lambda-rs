@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 
 use super::model::{Task, TaskFC};
 use super::TABLE_NAME;
-use crate::web::taskproto::model::TaskProto;
-use crate::web::taskproto::TABLE_NAME as TASKPROTO_TABLE_NAME;
+use crate::taskproto::model::TaskProto;
+use crate::taskproto::TABLE_NAME as TASKPROTO_TABLE_NAME;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {

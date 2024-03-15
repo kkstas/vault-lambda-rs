@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
 use crate::utils::time::{get_date_x_days_ago, get_today_datetime};
-use crate::{web::taskproto::model::TaskProto, AResult};
+use crate::{taskproto::model::TaskProto, AResult};
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Task {

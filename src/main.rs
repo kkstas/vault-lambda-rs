@@ -5,9 +5,12 @@ use axum::{routing::get, Router};
 use lambda_http::{run, tracing, Error};
 use std::env::set_var;
 
+pub mod entry;
+pub mod entryproto;
 pub mod error;
+pub mod task;
+pub mod taskproto;
 pub mod utils;
-pub mod web;
 
 pub use error::{AError, AResult};
 
@@ -29,19 +32,13 @@ async fn main() -> std::result::Result<(), Error> {
 
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1/task", web::task::routes::router(db_client.clone()))
+        .nest("/api/v1/task", task::routes::router(db_client.clone()))
         .nest(
             "/api/v1/taskproto",
-            web::taskproto::routes::router(db_client.clone()),
+            taskproto::routes::router(db_client.clone()),
         )
-        .nest(
-            "/api/v1/entry",
-            web::entry::routes::router(db_client.clone()),
-        )
-        .nest(
-            "/api/v1/entryproto",
-            web::entryproto::routes::router(db_client),
-        );
+        .nest("/api/v1/entry", entry::routes::router(db_client.clone()))
+        .nest("/api/v1/entryproto", entryproto::routes::router(db_client));
 
     run(app).await
 }

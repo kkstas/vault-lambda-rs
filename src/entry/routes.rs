@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 
 use super::model::{Entry, EntryFC};
 use super::TABLE_NAME;
-use crate::web::entryproto::model::EntryProto;
-use crate::web::entryproto::TABLE_NAME as ENTRYPROTO_TABLE_NAME;
+use crate::entryproto::model::EntryProto;
+use crate::entryproto::TABLE_NAME as ENTRYPROTO_TABLE_NAME;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {

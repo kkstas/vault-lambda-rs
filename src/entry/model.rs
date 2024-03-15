@@ -2,8 +2,8 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
+use crate::entryproto::model::EntryProto;
 use crate::utils::time::get_date_x_days_ago;
-use crate::web::entryproto::model::EntryProto;
 use crate::AResult;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
