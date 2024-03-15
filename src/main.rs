@@ -35,6 +35,10 @@ async fn main() -> std::result::Result<(), Error> {
             web::taskproto::routes::router(db_client.clone()),
         )
         .nest(
+            "/api/v1/entry",
+            web::entry::routes::router(db_client.clone()),
+        )
+        .nest(
             "/api/v1/entryproto",
             web::entryproto::routes::router(db_client),
         );
