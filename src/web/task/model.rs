@@ -3,21 +3,8 @@ use chrono::{Duration, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
+use crate::utils::time::{get_date_x_days_ago, get_today_datetime};
 use crate::{web::taskproto::model::TaskProto, AResult};
-
-fn get_today_datetime() -> String {
-    let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
-    Utc::now()
-        .with_timezone(&tz_offset)
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
-
-fn get_date_x_days_ago(x: i64) -> String {
-    let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
-    (Utc::now().with_timezone(&tz_offset) + Duration::days(-x))
-        .format("%Y-%m-%d")
-        .to_string()
-}
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Task {

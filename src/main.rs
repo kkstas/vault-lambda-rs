@@ -6,6 +6,7 @@ use lambda_http::{run, tracing, Error};
 use std::env::set_var;
 
 pub mod error;
+pub mod utils;
 pub mod web;
 
 pub use error::{AError, AResult};
@@ -31,7 +32,11 @@ async fn main() -> std::result::Result<(), Error> {
         .nest("/api/v1/task", web::task::routes::router(db_client.clone()))
         .nest(
             "/api/v1/taskproto",
-            web::taskproto::routes::router(db_client),
+            web::taskproto::routes::router(db_client.clone()),
+        )
+        .nest(
+            "/api/v1/entryproto",
+            web::entryproto::routes::router(db_client),
         );
 
     run(app).await
