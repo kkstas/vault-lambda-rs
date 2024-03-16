@@ -236,8 +236,7 @@ impl EntryProto {
             .item
             .ok_or(anyhow::Error::msg("Error querying DynamoDB entries"))?;
 
-        let i: EntryProto = from_item(item)?;
-        Ok(i)
+        Ok(from_item(item)?)
     }
 
     pub async fn ddb_list_inactive(client: Client, table_name: String) -> AResult<Vec<EntryProto>> {

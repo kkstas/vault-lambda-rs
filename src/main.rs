@@ -8,6 +8,7 @@ use std::env::set_var;
 pub mod entry;
 pub mod entryproto;
 pub mod error;
+pub mod record;
 pub mod task;
 pub mod taskproto;
 pub mod utils;
@@ -17,7 +18,7 @@ pub use error::{AError, AResult};
 #[tokio::main]
 async fn main() -> std::result::Result<(), Error> {
     let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let db_client = Client::new(&config);
+    let client = Client::new(&config);
 
     // If you use API Gateway stages, the Rust Runtime will include the stage name
     // as part of the path that your application receives.
@@ -32,13 +33,17 @@ async fn main() -> std::result::Result<(), Error> {
 
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1/task", task::routes::router(db_client.clone()))
+        .nest("/api/v1/task", task::routes::router(client.clone()))
         .nest(
             "/api/v1/taskproto",
-            taskproto::routes::router(db_client.clone()),
+            taskproto::routes::router(client.clone()),
         )
-        .nest("/api/v1/entry", entry::routes::router(db_client.clone()))
-        .nest("/api/v1/entryproto", entryproto::routes::router(db_client));
+        .nest("/api/v1/entry", entry::routes::router(client.clone()))
+        .nest(
+            "/api/v1/entryproto",
+            entryproto::routes::router(client.clone()),
+        )
+        .nest("/api/v1/record", record::routes::router(client));
 
     run(app).await
 }

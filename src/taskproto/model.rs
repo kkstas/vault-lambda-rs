@@ -268,8 +268,7 @@ impl TaskProto {
             .item
             .ok_or(anyhow::Error::msg("Error querying DynamoDB TaskProtos"))?;
 
-        let i: TaskProto = from_item(item)?;
-        Ok(i)
+        Ok(from_item(item)?)
     }
 
     async fn ddb_put_item(
