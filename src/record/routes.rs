@@ -7,14 +7,24 @@ use serde_json::{json, Value};
 
 use super::model::{Record, RecordFC};
 use super::TABLE_NAME;
+use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {
     Router::new()
         .route("/", post(create))
         .route("/:sk", delete(delete_task))
+        .route("/last-week", get(query_last_week))
         .route("/:sk", get(query))
         .layer(Extension(db_client))
+}
+
+async fn query_last_week(
+    Extension(db_client): Extension<Client>,
+) -> AResult<(StatusCode, Json<Value>)> {
+    let response =
+        Record::ddb_query(db_client, TABLE_NAME.to_string(), get_date_x_days_ago(7)).await?;
+    return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn query(
