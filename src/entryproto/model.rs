@@ -3,14 +3,14 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct EntryProto {
     pub pk: String, // "EntryProto::Active" || "EntryProto::Inactive"
     pub sk: String, // Primary key of referenced entry, e.g. "Entry::Dream"
     pub title: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct EntryProtoFC {
     pub sk: String,
     pub title: String,

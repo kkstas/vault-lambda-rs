@@ -4,7 +4,7 @@ use serde_dynamo::{from_item, from_items, to_item};
 
 use crate::AResult;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct TaskProto {
     pub pk: String,            // "TaskProto::Inactive" || "TaskProto::Active"
     pub sk: String,            // Primary key of referenced task, e.g. "Task::Workout"
@@ -19,7 +19,7 @@ pub struct TaskProto {
     pub is_timed: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct TaskProtoFC {
     pub sk: String,            // Primary key of referenced task, e.g. "Task::Workout"
     pub readable_name: String, // Readable name of referenced task, e.g. "Workout"

@@ -6,7 +6,7 @@ use crate::entryproto::EntryProto;
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Entry {
     pub pk: String, // e.g. "Entry::Dream"
     pub sk: String, // creation date in ISO 8601 format, e.g. "2021-08-01T00:00:00Z"
@@ -14,7 +14,7 @@ pub struct Entry {
     pub content: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct EntryFC {
     pub pk: String,
     pub content: String,

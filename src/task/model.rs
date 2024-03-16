@@ -6,7 +6,7 @@ use serde_dynamo::{from_items, to_item};
 use crate::utils::time::{get_date_x_days_ago, get_today_datetime};
 use crate::{taskproto::TaskProto, AResult};
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct Task {
     pub pk: String,            // e.g. "Task::Workout"
     pub sk: String,            // creation date in ISO 8601 format, e.g. "2021-08-01T00:00:00Z"
@@ -25,7 +25,7 @@ pub struct Task {
     pub total_time: Option<String>, // e.g. "00:30:00" if we want to track 30 minutes spent on the task
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Deserialize)]
 pub struct TaskFC {
     pub pk: String,
 
@@ -167,13 +167,11 @@ impl Task {
     }
 }
 
-#[derive(Debug)]
 struct RepTaskDaySummary {
     date: String,
     streak: u32,
 }
 
-#[derive(Debug)]
 struct CurrentRepData {
     streak: u32,
     rep_number: u8,

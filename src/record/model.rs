@@ -4,7 +4,7 @@ use serde_dynamo::{from_items, to_item};
 
 use crate::{utils::time::get_today_datetime, AResult};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Record {
     pub pk: String,
     pub sk: String,
@@ -14,7 +14,7 @@ pub struct Record {
     pub unit: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct RecordFC {
     pub name: String,
     pub amount: u64,
