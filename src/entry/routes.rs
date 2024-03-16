@@ -6,13 +6,15 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::routing::{delete, get, put};
 use axum::{Extension, Json, Router};
+use serde::Serialize;
 use serde_dynamo::from_items;
 use serde_json::{json, Value};
 
-use super::model::{Entry, EntryFC};
 use super::TABLE_NAME;
-use crate::entryproto::model::EntryProto;
+use super::{Entry, EntryFC};
+use crate::entryproto::EntryProto;
 use crate::entryproto::TABLE_NAME as ENTRYPROTO_TABLE_NAME;
+use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {
@@ -20,22 +22,60 @@ pub fn router(db_client: Client) -> Router {
         .route("/", put(put_item))
         .route("/:pk/:sk", delete(delete_entry))
         .route("/:pk/:sk", get(query))
-        .route("/:date", get(get_all_from_date))
+        .route("/:date", get(find_by_date))
+        .route("/last-week", get(find_last_week_handler))
         .layer(Extension(db_client))
 }
 
-async fn get_all_from_date(
+#[derive(Serialize)]
+pub struct ProtoWithEntries {
+    pub proto: EntryProto,
+    pub entries: Vec<Entry>,
+}
+
+async fn find_last_week_handler(
+    Extension(db_client): Extension<Client>,
+) -> AResult<(StatusCode, Json<Value>)> {
+    let result_entries = find_last_week_entries(db_client).await?;
+
+    return Ok((StatusCode::OK, Json(json!(result_entries))));
+}
+
+pub async fn find_last_week_entries(db_client: Client) -> AResult<Vec<ProtoWithEntries>> {
+    let active_ep =
+        EntryProto::ddb_list_active(db_client.clone(), ENTRYPROTO_TABLE_NAME.to_string()).await?;
+    let week_ago = get_date_x_days_ago(7);
+    let mut result_entries: Vec<ProtoWithEntries> = Vec::new();
+
+    for entry_proto in active_ep {
+        let t: Vec<Entry> = Entry::ddb_query(
+            db_client.clone(),
+            TABLE_NAME.to_string(),
+            entry_proto.sk.clone(),
+            week_ago.clone(),
+        )
+        .await?;
+        result_entries.push(ProtoWithEntries {
+            proto: entry_proto,
+            entries: t,
+        });
+    }
+    Ok(result_entries)
+}
+
+#[derive(Serialize)]
+struct FindEntriesResult {
+    entries: Vec<Entry>,
+    proto: Vec<EntryProto>,
+}
+
+async fn find_by_date(
     Extension(db_client): Extension<Client>,
     Path(date): Path<String>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    find_x_days_ago(db_client, date).await
-}
-
-async fn find_x_days_ago(db_client: Client, date: String) -> AResult<(StatusCode, Json<Value>)> {
-    let active_entry_proto_list =
+    let active_ep =
         EntryProto::ddb_list_active(db_client.clone(), ENTRYPROTO_TABLE_NAME.to_string()).await?;
-
-    let v: Vec<HashMap<String, AttributeValue>> = active_entry_proto_list
+    let v: Vec<HashMap<String, AttributeValue>> = active_ep
         .iter()
         .map(|ep| {
             HashMap::from([
@@ -55,9 +95,11 @@ async fn find_x_days_ago(db_client: Client, date: String) -> AResult<(StatusCode
         .await?;
 
     let entries: Vec<Entry> = from_items(ddb_res.responses.unwrap().remove(TABLE_NAME).unwrap())?;
-    let response = Json(json!({"entries":entries, "proto": active_entry_proto_list}));
 
-    Ok((StatusCode::OK, response))
+    Ok((
+        StatusCode::OK,
+        Json(json!({ "entries": entries, "proto": active_ep })),
+    ))
 }
 
 async fn query(

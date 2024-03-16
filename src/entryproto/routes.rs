@@ -7,8 +7,8 @@ use serde_json::{json, Value};
 
 use crate::AResult;
 
-use super::model::{EntryProto, EntryProtoFC};
 use super::TABLE_NAME;
+use super::{EntryProto, EntryProtoFC};
 
 pub fn router(db_client: Client) -> Router {
     Router::new()

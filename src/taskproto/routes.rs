@@ -5,8 +5,8 @@ use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router};
 use serde_json::{json, Value};
 
-use super::model::{TaskProto, TaskProtoFC};
 use super::TABLE_NAME;
+use super::{TaskProto, TaskProtoFC};
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {

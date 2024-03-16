@@ -3,42 +3,43 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Extension, Json, Router};
-use chrono::{Duration, FixedOffset, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use super::model::{Task, TaskFC};
 use super::TABLE_NAME;
-use crate::taskproto::model::TaskProto;
+use super::{Task, TaskFC};
+use crate::taskproto::TaskProto;
 use crate::taskproto::TABLE_NAME as TASKPROTO_TABLE_NAME;
+use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
 pub fn router(db_client: Client) -> Router {
     Router::new()
         .route("/", post(create))
-        .route("/last-week", get(find_last_week))
+        .route("/last-week", get(find_last_week_handler))
         .route("/:pk/:sk", delete(delete_task))
         .route("/:pk/:sk", get(query))
         .layer(Extension(db_client))
 }
 
 #[derive(Serialize)]
-struct ProtoWithTasks {
-    proto: TaskProto,
-    tasks: Vec<Task>,
+pub struct ProtoWithTasks {
+    pub proto: TaskProto,
+    pub tasks: Vec<Task>,
 }
 
-async fn find_last_week(
+async fn find_last_week_handler(
     Extension(db_client): Extension<Client>,
 ) -> AResult<(StatusCode, Json<Value>)> {
+    let result_tasks = find_last_week_tasks(db_client).await?;
+    return Ok((StatusCode::OK, Json(json!(result_tasks))));
+}
+
+pub async fn find_last_week_tasks(db_client: Client) -> AResult<Vec<ProtoWithTasks>> {
     let active_task_list_entries =
         TaskProto::ddb_list_active(db_client.clone(), TASKPROTO_TABLE_NAME.to_string()).await?;
 
-    let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
-    let week_ago = (Utc::now().with_timezone(&tz_offset) + Duration::days(-7))
-        .format("%Y-%m-%d")
-        .to_string();
-
+    let week_ago = get_date_x_days_ago(7);
     let mut result_tasks: Vec<ProtoWithTasks> = Vec::new();
 
     for task_list_entry in active_task_list_entries {
@@ -54,8 +55,7 @@ async fn find_last_week(
             tasks: t,
         });
     }
-
-    return Ok((StatusCode::OK, Json(json!(result_tasks))));
+    Ok(result_tasks)
 }
 
 async fn query(

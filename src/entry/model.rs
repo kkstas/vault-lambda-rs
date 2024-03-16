@@ -2,7 +2,7 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
-use crate::entryproto::model::EntryProto;
+use crate::entryproto::EntryProto;
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
@@ -85,6 +85,25 @@ impl Entry {
     }
 
     pub async fn ddb_delete(
+        client: Client,
+        table_name: String,
+        pk: String,
+        sk: String,
+    ) -> AResult<()> {
+        if !pk.starts_with("Entry::") {
+            return Err(anyhow::Error::msg("Invalid Entry primary key").into());
+        }
+        client
+            .delete_item()
+            .table_name(table_name)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(sk))
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn ddb_delete_test(
         client: Client,
         table_name: String,
         pk: String,

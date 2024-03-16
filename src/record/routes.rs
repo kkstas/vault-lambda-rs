@@ -5,8 +5,8 @@ use axum::routing::{delete, get, post};
 use axum::{Extension, Json, Router};
 use serde_json::{json, Value};
 
-use super::model::{Record, RecordFC};
 use super::TABLE_NAME;
+use super::{Record, RecordFC};
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
@@ -14,17 +14,9 @@ pub fn router(db_client: Client) -> Router {
     Router::new()
         .route("/", post(create))
         .route("/:sk", delete(delete_task))
-        .route("/last-week", get(query_last_week))
+        .route("/last-week", get(find_last_week_handler))
         .route("/:sk", get(query))
         .layer(Extension(db_client))
-}
-
-async fn query_last_week(
-    Extension(db_client): Extension<Client>,
-) -> AResult<(StatusCode, Json<Value>)> {
-    let response =
-        Record::ddb_query(db_client, TABLE_NAME.to_string(), get_date_x_days_ago(7)).await?;
-    return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn query(
@@ -55,4 +47,19 @@ async fn delete_task(
 
     Record::ddb_delete(client, TABLE_NAME.to_string(), sk).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn find_last_week_handler(
+    Extension(db_client): Extension<Client>,
+) -> AResult<(StatusCode, Json<Value>)> {
+    return Ok((
+        StatusCode::OK,
+        Json(json!(find_last_week_records(db_client).await?)),
+    ));
+}
+
+pub async fn find_last_week_records(db_client: Client) -> AResult<Vec<Record>> {
+    let response =
+        Record::ddb_query(db_client, TABLE_NAME.to_string(), get_date_x_days_ago(7)).await?;
+    Ok(response)
 }
