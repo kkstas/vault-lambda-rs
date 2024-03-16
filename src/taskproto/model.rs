@@ -1,6 +1,6 @@
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
-use serde_dynamo::{from_items, to_item};
+use serde_dynamo::{from_item, from_items, to_item};
 
 use crate::AResult;
 
@@ -51,34 +51,36 @@ impl TaskProto {
 
 impl TaskProto {
     pub async fn set_as_active(client: Client, table_name: String, sk: String) -> AResult<()> {
-        let found_inactive_task_arr = TaskProto::ddb_find(
+        let mut found_inactive_task = match TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Inactive"),
             sk.clone(),
         )
-        .await?;
-        if found_inactive_task_arr.is_empty() {
-            return Err(anyhow::Error::msg(
-                "Inactive TaskProto with given sort key does not exist",
-            )
-            .into());
-        }
-        let mut found_inactive_task: TaskProto = found_inactive_task_arr.first().unwrap().clone();
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                return Err(anyhow::Error::msg(
+                    "Inactive TaskProto with given sort key does not exist",
+                )
+                .into())
+            }
+        };
 
-        let found_active_task_arr = TaskProto::ddb_find(
+        if TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Active"),
             sk.clone(),
         )
-        .await?;
-
-        if !found_active_task_arr.is_empty() {
+        .await
+        .is_ok()
+        {
             return Err(
                 anyhow::Error::msg("Active TaskProto with given sort key already exists").into(),
             );
-        }
+        };
 
         found_inactive_task.pk = String::from("TaskProto::Active");
         TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_inactive_task).await?;
@@ -87,34 +89,37 @@ impl TaskProto {
     }
 
     pub async fn set_as_inactive(client: Client, table_name: String, sk: String) -> AResult<()> {
-        let found_task_arr = TaskProto::ddb_find(
+        let mut found_task = match TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Active"),
             sk.clone(),
         )
-        .await?;
-        if found_task_arr.is_empty() {
-            return Err(
-                anyhow::Error::msg("Active TaskProto with given sort key does not exist").into(),
-            );
-        }
-        let mut found_task: TaskProto = found_task_arr.first().unwrap().clone();
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                return Err(anyhow::Error::msg(
+                    "Active TaskProto with given sort key does not exist",
+                )
+                .into())
+            }
+        };
 
-        let found_inactive_task_arr = TaskProto::ddb_find(
+        if TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Inactive"),
             sk.clone(),
         )
-        .await?;
-
-        if !found_inactive_task_arr.is_empty() {
+        .await
+        .is_ok()
+        {
             return Err(anyhow::Error::msg(
                 "Inactive TaskProto with given sort key already exists",
             )
             .into());
-        }
+        };
 
         found_task.pk = String::from("TaskProto::Inactive");
         TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_task).await?;
@@ -127,66 +132,67 @@ impl TaskProto {
         table_name: String,
         task_list_entry_fc: TaskProtoFC,
     ) -> AResult<()> {
-        let active_query_res = TaskProto::ddb_find(
+        let active_tp_exists = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Active"),
             task_list_entry_fc.sk.clone(),
         )
-        .await?;
-        let inactive_query_res = TaskProto::ddb_find(
+        .await
+        .is_ok();
+        let inactive_tp_exists = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Inactive"),
             task_list_entry_fc.sk.clone(),
         )
-        .await?;
-        if active_query_res.is_empty() && inactive_query_res.is_empty() {
-            if !task_list_entry_fc.has_streak && task_list_entry_fc.has_reps {
-                return Err(anyhow::Error::msg(
-                    "TaskProto with reps must have 'has_streak' property set to true",
-                )
-                .into());
-            }
+        .await
+        .is_ok();
 
-            if task_list_entry_fc.has_streak && task_list_entry_fc.weekly_streak_tolerance.is_none()
-            {
-                return Err(anyhow::Error::msg(
-                    "TaskProto with streaks must have weekly_streak_tolerance",
-                )
-                .into());
-            }
-            if !task_list_entry_fc.has_streak
-                && task_list_entry_fc.weekly_streak_tolerance.is_some()
-            {
-                return Err(anyhow::Error::msg(
-                    "TaskProto without streaks must not have weekly_streak_tolerance",
-                )
-                .into());
-            }
-
-            if task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_none() {
-                return Err(
-                    anyhow::Error::msg("TaskProto with reps must have daily_reps_minimum").into(),
-                );
-            }
-
-            if !task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_some() {
-                return Err(anyhow::Error::msg(
-                    "TaskProto without reps must not have daily_reps_minimum",
-                )
-                .into());
-            }
-
-            TaskProto::ddb_put_item(
-                client,
-                table_name,
-                TaskProto::new(task_list_entry_fc, "TaskProto::Active".to_string()),
-            )
-            .await?;
-            return Ok(());
+        if active_tp_exists || inactive_tp_exists {
+            return Err(anyhow::Error::msg("TaskProto with given sort key already exists").into());
         }
-        return Err(anyhow::Error::msg("TaskProto with given sort key already exists").into());
+
+        if !task_list_entry_fc.has_streak && task_list_entry_fc.has_reps {
+            return Err(anyhow::Error::msg(
+                "TaskProto with reps must have 'has_streak' property set to true",
+            )
+            .into());
+        }
+
+        if task_list_entry_fc.has_streak && task_list_entry_fc.weekly_streak_tolerance.is_none() {
+            return Err(anyhow::Error::msg(
+                "TaskProto with streaks must have weekly_streak_tolerance",
+            )
+            .into());
+        }
+        if !task_list_entry_fc.has_streak && task_list_entry_fc.weekly_streak_tolerance.is_some() {
+            return Err(anyhow::Error::msg(
+                "TaskProto without streaks must not have weekly_streak_tolerance",
+            )
+            .into());
+        }
+
+        if task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_none() {
+            return Err(
+                anyhow::Error::msg("TaskProto with reps must have daily_reps_minimum").into(),
+            );
+        }
+
+        if !task_list_entry_fc.has_reps && task_list_entry_fc.daily_reps_minimum.is_some() {
+            return Err(anyhow::Error::msg(
+                "TaskProto without reps must not have daily_reps_minimum",
+            )
+            .into());
+        }
+
+        TaskProto::ddb_put_item(
+            client,
+            table_name,
+            TaskProto::new(task_list_entry_fc, "TaskProto::Active".to_string()),
+        )
+        .await?;
+        return Ok(());
     }
 
     pub async fn update(
@@ -194,45 +200,31 @@ impl TaskProto {
         table_name: String,
         task_list_entry_fu: TaskProtoFC,
     ) -> AResult<()> {
-        let active_query_res = TaskProto::ddb_find(
+        let active_tp_exists = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Active"),
             task_list_entry_fu.sk.clone(),
         )
-        .await?;
-        let inactive_query_res = TaskProto::ddb_find(
+        .await
+        .is_ok();
+        let inactive_tp_exists = TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("TaskProto::Inactive"),
             task_list_entry_fu.sk.clone(),
         )
-        .await?;
+        .await
+        .is_ok();
 
-        let active_empty = active_query_res.is_empty();
-        let inactive_empty = inactive_query_res.is_empty();
-
-        if active_empty && inactive_empty {
+        if !active_tp_exists && inactive_tp_exists {
             return Err(anyhow::Error::msg("TaskProto with given sort key does not exist").into());
         }
-        if !active_empty && !inactive_empty {
+        if active_tp_exists && inactive_tp_exists {
             return Err(anyhow::Error::msg("Corrupted data - TaskProto with given sort key exists in both active and inactive lists").into());
         }
 
-        if active_query_res.len() > 1 {
-            return Err(anyhow::Error::msg(
-                "Corrupted data - there is more than one active TaskProto with that sort key",
-            )
-            .into());
-        }
-
-        if inactive_query_res.len() > 1 {
-            return Err(anyhow::Error::msg(
-                "Corrupted data - there is more than one inactive TaskProto with that sort key",
-            )
-            .into());
-        }
-        let task_list_entry_state = if !active_empty {
+        let task_list_entry_state = if active_tp_exists {
             String::from("TaskProto::Active")
         } else {
             String::from("TaskProto::Inactive")
@@ -251,7 +243,7 @@ impl TaskProto {
         table_name: String,
         pk: String,
         sk: String,
-    ) -> AResult<Vec<TaskProto>> {
+    ) -> AResult<TaskProto> {
         if (pk != "TaskProto::Active") && (pk != "TaskProto::Inactive") {
             return Err(
                 anyhow::Error::msg("Invalid TaskProto query partition key argument. {:?}").into(),
@@ -263,23 +255,21 @@ impl TaskProto {
                 anyhow::Error::msg("Invalid TaskProto query sort key argument. {:?}").into(),
             );
         }
-        let query = client
-            .query()
-            .table_name(table_name)
-            .key_condition_expression("pk = :pk AND sk = :sk")
-            .expression_attribute_values(":pk", AttributeValue::S(pk))
-            .expression_attribute_values(":sk", AttributeValue::S(sk));
 
-        let res = query.send().await?;
-        match res.items {
-            Some(items) => {
-                let tasks: Vec<TaskProto> = from_items(items)?;
-                return Ok(tasks);
-            }
-            None => {
-                return Err(anyhow::Error::msg("Error querying DynamoDB tasks. {:?}").into());
-            }
-        }
+        let res = client
+            .get_item()
+            .table_name(table_name)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(sk))
+            .send()
+            .await?;
+
+        let item = res
+            .item
+            .ok_or(anyhow::Error::msg("Error querying DynamoDB TaskProtos"))?;
+
+        let i: TaskProto = from_item(item)?;
+        Ok(i)
     }
 
     async fn ddb_put_item(

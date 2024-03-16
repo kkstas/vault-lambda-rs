@@ -41,21 +41,24 @@ impl Task {
     pub async fn ddb_create(client: Client, table_name: String, task_fc: TaskFC) -> AResult<()> {
         let mut task_to_create: Task = Task::default();
 
-        let task_proto_result = TaskProto::ddb_find(
+        let task_proto = match TaskProto::ddb_find(
             client.clone(),
             table_name.clone(),
             "TaskProto::Active".to_string(),
             task_fc.pk.clone(),
         )
-        .await?;
-        if task_proto_result.is_empty() {
-            return Err(anyhow::Error::msg(format!(
-                "TaskProto for given task {} not found",
-                task_fc.pk
-            ))
-            .into());
-        }
-        let task_proto = task_proto_result.first().unwrap();
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                return Err(anyhow::Error::msg(format!(
+                    "TaskProto for given task {} not found",
+                    task_fc.pk
+                ))
+                .into());
+            }
+        };
+
         task_to_create.pk = task_proto.sk.clone();
         task_to_create.sk = get_today_datetime();
         task_to_create.readable_name = task_proto.readable_name.clone();
