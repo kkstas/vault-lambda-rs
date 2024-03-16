@@ -51,21 +51,22 @@ impl Entry {
         table_name: String,
         entry_fc: EntryFC,
     ) -> AResult<()> {
-        let entry_proto_vec = EntryProto::ddb_find(
+        let entry_proto = match EntryProto::ddb_find(
             client.clone(),
             table_name.clone(),
             String::from("EntryProto::Active"),
             entry_fc.pk.clone(),
         )
-        .await?;
-
-        if entry_proto_vec.is_empty() {
-            return Err(anyhow::Error::msg(
-                "EntryProto for given Entry does not exist in DynamoDB",
-            )
-            .into());
-        }
-        let entry_proto = entry_proto_vec.get(0).unwrap();
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                return Err(anyhow::Error::msg(
+                    "EntryProto for given Entry does not exist in DynamoDB",
+                )
+                .into())
+            }
+        };
 
         let entry = Entry {
             pk: entry_proto.sk.clone(),
