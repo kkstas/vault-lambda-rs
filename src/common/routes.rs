@@ -7,10 +7,8 @@ use crate::{
     AResult,
 };
 
-pub fn router(db_client: Client) -> Router {
-    Router::new()
-        .route("/", get(common_last_week_handler))
-        .layer(Extension(db_client))
+pub fn router() -> Router {
+    Router::new().route("/", get(common_last_week_handler))
 }
 
 async fn common_last_week_handler(Extension(db_client): Extension<Client>) -> AResult<Json<Value>> {

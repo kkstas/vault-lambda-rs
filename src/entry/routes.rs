@@ -17,14 +17,13 @@ use crate::entryproto::TABLE_NAME as ENTRYPROTO_TABLE_NAME;
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
-pub fn router(db_client: Client) -> Router {
+pub fn router() -> Router {
     Router::new()
         .route("/", put(put_item))
         .route("/:pk/:sk", delete(delete_entry))
         .route("/:pk/:sk", get(query))
         .route("/:date", get(find_by_date))
         .route("/last-week", get(find_last_week_handler))
-        .layer(Extension(db_client))
 }
 
 #[derive(Serialize)]

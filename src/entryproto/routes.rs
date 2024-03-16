@@ -10,7 +10,7 @@ use crate::AResult;
 use super::TABLE_NAME;
 use super::{EntryProto, EntryProtoFC};
 
-pub fn router(db_client: Client) -> Router {
+pub fn router() -> Router {
     Router::new()
         .route("/", put(put_entry_proto))
         .route("/:pk/:sk", get(find))
@@ -18,7 +18,6 @@ pub fn router(db_client: Client) -> Router {
         .route("/inactive", get(list_inactive))
         .route("/active/:sk", put(set_as_active))
         .route("/inactive/:sk", put(set_as_inactive))
-        .layer(Extension(db_client))
 }
 
 async fn list_active(

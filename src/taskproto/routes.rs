@@ -9,7 +9,7 @@ use super::TABLE_NAME;
 use super::{TaskProto, TaskProtoFC};
 use crate::AResult;
 
-pub fn router(db_client: Client) -> Router {
+pub fn router() -> Router {
     Router::new()
         .route("/", post(create))
         .route("/:pk/:sk", get(find))
@@ -18,7 +18,6 @@ pub fn router(db_client: Client) -> Router {
         .route("/active/:sk", put(set_as_active))
         .route("/inactive/:sk", put(set_as_inactive))
         .route("/", put(update))
-        .layer(Extension(db_client))
 }
 
 async fn set_as_active(

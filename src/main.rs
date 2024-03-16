@@ -1,6 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client;
 use axum::http::StatusCode;
+use axum::Extension;
 use axum::{routing::get, Router};
 use lambda_http::{run, tracing, Error};
 use std::env::set_var;
@@ -34,19 +35,13 @@ async fn main() -> std::result::Result<(), Error> {
 
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1/task", task::router(client.clone()))
-        .nest(
-            "/api/v1/taskproto",
-            taskproto::router(client.clone()),
-        )
-        .nest("/api/v1/entry", entry::router(client.clone()))
-        .nest(
-            "/api/v1/entryproto",
-            entryproto::router(client.clone()),
-        )
-        .nest("/api/v1/record", record::router(client.clone()))
-
-        .nest("/api/v1/common", common::router(client));
+        .nest("/api/v1/task", task::router())
+        .nest("/api/v1/taskproto", taskproto::router())
+        .nest("/api/v1/entry", entry::router())
+        .nest("/api/v1/entryproto", entryproto::router())
+        .nest("/api/v1/record", record::router())
+        .nest("/api/v1/common", common::router())
+        .layer(Extension(client));
 
     run(app).await
 }

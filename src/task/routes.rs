@@ -13,13 +13,12 @@ use crate::taskproto::TABLE_NAME as TASKPROTO_TABLE_NAME;
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
-pub fn router(db_client: Client) -> Router {
+pub fn router() -> Router {
     Router::new()
         .route("/", post(create))
         .route("/last-week", get(find_last_week_handler))
         .route("/:pk/:sk", delete(delete_task))
         .route("/:pk/:sk", get(query))
-        .layer(Extension(db_client))
 }
 
 #[derive(Serialize)]
