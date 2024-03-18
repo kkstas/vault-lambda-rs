@@ -2,6 +2,7 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
 
+use super::TABLE_NAME;
 use crate::AResult;
 
 #[derive(Serialize, Deserialize)]
@@ -50,10 +51,9 @@ impl TaskProto {
 }
 
 impl TaskProto {
-    pub async fn set_as_active(client: Client, table_name: String, sk: String) -> AResult<()> {
+    pub async fn set_as_active(client: Client, sk: String) -> AResult<()> {
         let mut found_inactive_task = match TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Inactive"),
             sk.clone(),
         )
@@ -70,7 +70,6 @@ impl TaskProto {
 
         if TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Active"),
             sk.clone(),
         )
@@ -83,15 +82,14 @@ impl TaskProto {
         };
 
         found_inactive_task.pk = String::from("TaskProto::Active");
-        TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_inactive_task).await?;
-        TaskProto::ddb_delete(client, table_name, String::from("TaskProto::Inactive"), sk).await?;
+        TaskProto::ddb_put_item(client.clone(), found_inactive_task).await?;
+        TaskProto::ddb_delete(client, String::from("TaskProto::Inactive"), sk).await?;
         Ok(())
     }
 
-    pub async fn set_as_inactive(client: Client, table_name: String, sk: String) -> AResult<()> {
+    pub async fn set_as_inactive(client: Client, sk: String) -> AResult<()> {
         let mut found_task = match TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Active"),
             sk.clone(),
         )
@@ -108,7 +106,6 @@ impl TaskProto {
 
         if TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Inactive"),
             sk.clone(),
         )
@@ -122,19 +119,14 @@ impl TaskProto {
         };
 
         found_task.pk = String::from("TaskProto::Inactive");
-        TaskProto::ddb_put_item(client.clone(), table_name.clone(), found_task).await?;
-        TaskProto::ddb_delete(client, table_name, String::from("TaskProto::Active"), sk).await?;
+        TaskProto::ddb_put_item(client.clone(), found_task).await?;
+        TaskProto::ddb_delete(client, String::from("TaskProto::Active"), sk).await?;
         Ok(())
     }
 
-    pub async fn create(
-        client: Client,
-        table_name: String,
-        task_list_entry_fc: TaskProtoFC,
-    ) -> AResult<()> {
+    pub async fn create(client: Client, task_list_entry_fc: TaskProtoFC) -> AResult<()> {
         let active_tp_exists = TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Active"),
             task_list_entry_fc.sk.clone(),
         )
@@ -142,7 +134,6 @@ impl TaskProto {
         .is_ok();
         let inactive_tp_exists = TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Inactive"),
             task_list_entry_fc.sk.clone(),
         )
@@ -188,21 +179,15 @@ impl TaskProto {
 
         TaskProto::ddb_put_item(
             client,
-            table_name,
             TaskProto::new(task_list_entry_fc, "TaskProto::Active".to_string()),
         )
         .await?;
         return Ok(());
     }
 
-    pub async fn update(
-        client: Client,
-        table_name: String,
-        task_list_entry_fu: TaskProtoFC,
-    ) -> AResult<()> {
+    pub async fn update(client: Client, task_list_entry_fu: TaskProtoFC) -> AResult<()> {
         let active_tp_exists = TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Active"),
             task_list_entry_fu.sk.clone(),
         )
@@ -210,7 +195,6 @@ impl TaskProto {
         .is_ok();
         let inactive_tp_exists = TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("TaskProto::Inactive"),
             task_list_entry_fu.sk.clone(),
         )
@@ -231,19 +215,14 @@ impl TaskProto {
         };
 
         let task_list_entry = TaskProto::new(task_list_entry_fu, task_list_entry_state);
-        TaskProto::ddb_put_item(client, table_name, task_list_entry).await?;
+        TaskProto::ddb_put_item(client, task_list_entry).await?;
         return Ok(());
     }
 }
 
 // Functions for direct interaction with DynamoDB
 impl TaskProto {
-    pub async fn ddb_find(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<TaskProto> {
+    pub async fn ddb_find(client: Client, pk: String, sk: String) -> AResult<TaskProto> {
         if (pk != "TaskProto::Active") && (pk != "TaskProto::Inactive") {
             return Err(
                 anyhow::Error::msg("Invalid TaskProto query partition key argument. {:?}").into(),
@@ -258,7 +237,7 @@ impl TaskProto {
 
         let res = client
             .get_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
             .send()
@@ -271,11 +250,7 @@ impl TaskProto {
         Ok(from_item(item)?)
     }
 
-    async fn ddb_put_item(
-        client: Client,
-        table_name: String,
-        task_list_entry: TaskProto,
-    ) -> AResult<()> {
+    async fn ddb_put_item(client: Client, task_list_entry: TaskProto) -> AResult<()> {
         if (task_list_entry.pk != "TaskProto::Active")
             && (task_list_entry.pk != "TaskProto::Inactive")
         {
@@ -289,17 +264,17 @@ impl TaskProto {
 
         let req = client
             .put_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_list_active(client: Client, table_name: String) -> AResult<Vec<TaskProto>> {
+    pub async fn ddb_list_active(client: Client) -> AResult<Vec<TaskProto>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(":pk", AttributeValue::S("TaskProto::Active".to_string()));
 
@@ -315,10 +290,10 @@ impl TaskProto {
         }
     }
 
-    pub async fn ddb_list_inactive(client: Client, table_name: String) -> AResult<Vec<TaskProto>> {
+    pub async fn ddb_list_inactive(client: Client) -> AResult<Vec<TaskProto>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",
@@ -337,7 +312,7 @@ impl TaskProto {
         }
     }
 
-    async fn ddb_delete(client: Client, table_name: String, pk: String, sk: String) -> AResult<()> {
+    async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
         if !pk.starts_with("TaskProto::") {
             return Err(anyhow::Error::msg("Invalid TaskProto primary key").into());
         }
@@ -346,7 +321,7 @@ impl TaskProto {
         }
         let req = client
             .delete_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk));
 

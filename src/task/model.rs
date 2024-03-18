@@ -3,6 +3,7 @@ use chrono::{Duration, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
+use super::TABLE_NAME;
 use crate::utils::time::{get_date_x_days_ago, get_today_datetime};
 use crate::{taskproto::TaskProto, AResult};
 
@@ -38,12 +39,11 @@ pub struct TaskFC {
 
 // DynamoDB handlers
 impl Task {
-    pub async fn ddb_create(client: Client, table_name: String, task_fc: TaskFC) -> AResult<()> {
+    pub async fn ddb_create(client: Client, task_fc: TaskFC) -> AResult<()> {
         let mut task_to_create: Task = Task::default();
 
         let task_proto = match TaskProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             "TaskProto::Active".to_string(),
             task_fc.pk.clone(),
         )
@@ -76,12 +76,8 @@ impl Task {
         }
 
         if task_proto.has_streak == true {
-            let last_week_tasks = Task::last_7_days_of_given_task(
-                client.clone(),
-                table_name.to_string(),
-                task_to_create.pk.clone(),
-            )
-            .await?;
+            let last_week_tasks =
+                Task::last_7_days_of_given_task(client.clone(), task_to_create.pk.clone()).await?;
 
             if task_proto.has_reps == true {
                 let current_rep_data = Task::compute_reps_streak(
@@ -101,12 +97,8 @@ impl Task {
 
                 task_to_create.streak = Some(Task::compute_non_reps_streak(
                     task_proto.weekly_streak_tolerance.unwrap(),
-                    Task::last_7_days_of_given_task(
-                        client.clone(),
-                        table_name.to_string(),
-                        task_to_create.pk.clone(),
-                    )
-                    .await?,
+                    Task::last_7_days_of_given_task(client.clone(), task_to_create.pk.clone())
+                        .await?,
                 )?);
             }
         }
@@ -115,25 +107,20 @@ impl Task {
 
         let req = client
             .put_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<()> {
+    pub async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
         if !pk.starts_with("Task::") {
             return Err(anyhow::Error::msg("Invalid Task primary key").into());
         }
         let req = client
             .delete_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk));
 
@@ -141,15 +128,10 @@ impl Task {
         Ok(())
     }
 
-    pub async fn ddb_query(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<Vec<Task>> {
+    pub async fn ddb_query(client: Client, pk: String, sk: String) -> AResult<Vec<Task>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk AND sk >= :sk")
             .expression_attribute_values(":pk", AttributeValue::S(pk))
             .expression_attribute_values(":sk", AttributeValue::S(sk));
@@ -286,18 +268,13 @@ impl Task {
         Ok(streak)
     }
 
-    async fn last_7_days_of_given_task(
-        client: Client,
-        table_name: String,
-        pk: String,
-    ) -> AResult<Vec<Task>> {
+    async fn last_7_days_of_given_task(client: Client, pk: String) -> AResult<Vec<Task>> {
         let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
         let week_ago = (Utc::now().with_timezone(&tz_offset) + Duration::days(-7))
             .format("%Y-%m-%d")
             .to_string();
 
-        let tasks: Vec<Task> =
-            Task::ddb_query(client.clone(), table_name.to_string(), pk, week_ago.clone()).await?;
+        let tasks: Vec<Task> = Task::ddb_query(client.clone(), pk, week_ago.clone()).await?;
         Ok(tasks)
     }
 }

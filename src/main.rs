@@ -6,6 +6,7 @@ use axum::{routing::get, Router};
 use lambda_http::{run, tracing, Error};
 use std::env::set_var;
 
+pub mod archive;
 pub mod common;
 pub mod entry;
 pub mod entryproto;
@@ -40,6 +41,7 @@ async fn main() -> std::result::Result<(), Error> {
         .nest("/api/v1/entry", entry::router())
         .nest("/api/v1/entryproto", entryproto::router())
         .nest("/api/v1/record", record::router())
+        .nest("/api/v1/archive", archive::router())
         .nest("/api/v1/common", common::router())
         .layer(Extension(client));
 

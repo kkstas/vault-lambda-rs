@@ -3,6 +3,8 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
 
+use super::TABLE_NAME;
+
 #[derive(Serialize, Deserialize)]
 pub struct EntryProto {
     pub pk: String, // "EntryProto::Active" || "EntryProto::Inactive"
@@ -27,14 +29,13 @@ impl From<EntryProtoFC> for EntryProto {
 }
 
 impl EntryProto {
-    pub async fn set_as_inactive(client: Client, table_name: String, sk: String) -> AResult<()> {
+    pub async fn set_as_inactive(client: Client, sk: String) -> AResult<()> {
         if !(sk.starts_with("Entry::")) {
             return Err(anyhow::Error::msg("Invalid EntryProto sort key").into());
         }
 
         let active_query_res = match EntryProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("EntryProto::Active"),
             sk.clone(),
         )
@@ -51,7 +52,6 @@ impl EntryProto {
 
         if EntryProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("EntryProto::Inactive"),
             sk.clone(),
         )
@@ -71,23 +71,22 @@ impl EntryProto {
         let item = to_item(entry)?;
         client
             .put_item()
-            .table_name(table_name.clone())
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item))
             .send()
             .await?;
 
-        EntryProto::ddb_delete(client, table_name, String::from("EntryProto::Active"), sk).await?;
+        EntryProto::ddb_delete(client, String::from("EntryProto::Active"), sk).await?;
         Ok(())
     }
 
-    pub async fn set_as_active(client: Client, table_name: String, sk: String) -> AResult<()> {
+    pub async fn set_as_active(client: Client, sk: String) -> AResult<()> {
         if !(sk.starts_with("Entry::")) {
             return Err(anyhow::Error::msg("Invalid EntryProto sort key").into());
         }
 
         if EntryProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("EntryProto::Active"),
             sk.clone(),
         )
@@ -101,7 +100,6 @@ impl EntryProto {
 
         let inactive_entry = match EntryProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("EntryProto::Inactive"),
             sk.clone(),
         )
@@ -124,24 +122,18 @@ impl EntryProto {
         let item = to_item(entry)?;
         client
             .put_item()
-            .table_name(table_name.clone())
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item))
             .send()
             .await?;
 
-        EntryProto::ddb_delete(client, table_name, String::from("EntryProto::Inactive"), sk)
-            .await?;
+        EntryProto::ddb_delete(client, String::from("EntryProto::Inactive"), sk).await?;
         Ok(())
     }
 
-    pub async fn ddb_put_item(
-        client: Client,
-        table_name: String,
-        entry_proto_fc: EntryProtoFC,
-    ) -> AResult<()> {
+    pub async fn ddb_put_item(client: Client, entry_proto_fc: EntryProtoFC) -> AResult<()> {
         if EntryProto::ddb_find(
             client.clone(),
-            table_name.clone(),
             String::from("EntryProto::Inactive"),
             entry_proto_fc.sk.clone(),
         )
@@ -161,25 +153,20 @@ impl EntryProto {
         let item = to_item(entry)?;
         client
             .put_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item))
             .send()
             .await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<()> {
+    pub async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
         if !pk.starts_with("EntryProto::") {
             return Err(anyhow::Error::msg("Invalid EntryProto primary key").into());
         }
         client
             .delete_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
             .send()
@@ -187,10 +174,10 @@ impl EntryProto {
         Ok(())
     }
 
-    pub async fn ddb_list_active(client: Client, table_name: String) -> AResult<Vec<EntryProto>> {
+    pub async fn ddb_list_active(client: Client) -> AResult<Vec<EntryProto>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",
@@ -209,12 +196,7 @@ impl EntryProto {
         }
     }
 
-    pub async fn ddb_find(
-        client: Client,
-        table_name: String,
-        pk: String,
-        sk: String,
-    ) -> AResult<EntryProto> {
+    pub async fn ddb_find(client: Client, pk: String, sk: String) -> AResult<EntryProto> {
         if (pk != "EntryProto::Active") && (pk != "EntryProto::Inactive") {
             return Err(
                 anyhow::Error::msg("Invalid EntryProto query partition key argument").into(),
@@ -226,7 +208,7 @@ impl EntryProto {
         }
         let res = client
             .get_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
             .send()
@@ -239,10 +221,10 @@ impl EntryProto {
         Ok(from_item(item)?)
     }
 
-    pub async fn ddb_list_inactive(client: Client, table_name: String) -> AResult<Vec<EntryProto>> {
+    pub async fn ddb_list_inactive(client: Client) -> AResult<Vec<EntryProto>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",

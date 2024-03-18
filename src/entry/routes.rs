@@ -13,7 +13,6 @@ use serde_json::{json, Value};
 use super::TABLE_NAME;
 use super::{Entry, EntryFC};
 use crate::entryproto::EntryProto;
-use crate::entryproto::TABLE_NAME as ENTRYPROTO_TABLE_NAME;
 use crate::utils::time::get_date_x_days_ago;
 use crate::AResult;
 
@@ -41,19 +40,13 @@ async fn find_last_week_handler(
 }
 
 pub async fn find_last_week_entries(db_client: Client) -> AResult<Vec<ProtoWithEntries>> {
-    let active_ep =
-        EntryProto::ddb_list_active(db_client.clone(), ENTRYPROTO_TABLE_NAME.to_string()).await?;
+    let active_ep = EntryProto::ddb_list_active(db_client.clone()).await?;
     let week_ago = get_date_x_days_ago(7);
     let mut result_entries: Vec<ProtoWithEntries> = Vec::new();
 
     for entry_proto in active_ep {
-        let t: Vec<Entry> = Entry::ddb_query(
-            db_client.clone(),
-            TABLE_NAME.to_string(),
-            entry_proto.sk.clone(),
-            week_ago.clone(),
-        )
-        .await?;
+        let t: Vec<Entry> =
+            Entry::ddb_query(db_client.clone(), entry_proto.sk.clone(), week_ago.clone()).await?;
         result_entries.push(ProtoWithEntries {
             proto: entry_proto,
             entries: t,
@@ -72,8 +65,7 @@ async fn find_by_date(
     Extension(db_client): Extension<Client>,
     Path(date): Path<String>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let active_ep =
-        EntryProto::ddb_list_active(db_client.clone(), ENTRYPROTO_TABLE_NAME.to_string()).await?;
+    let active_ep = EntryProto::ddb_list_active(db_client.clone()).await?;
     let v: Vec<HashMap<String, AttributeValue>> = active_ep
         .iter()
         .map(|ep| {
@@ -105,7 +97,7 @@ async fn query(
     Extension(db_client): Extension<Client>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = Entry::ddb_query(db_client, TABLE_NAME.to_string(), pk, sk).await?;
+    let response = Entry::ddb_query(db_client, pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
@@ -113,7 +105,7 @@ async fn put_item(
     Extension(client): Extension<Client>,
     Json(payload): Json<EntryFC>,
 ) -> AResult<StatusCode> {
-    Entry::ddb_put_item(client, TABLE_NAME.to_string(), payload).await?;
+    Entry::ddb_put_item(client, payload).await?;
     Ok(StatusCode::CREATED)
 }
 
@@ -121,18 +113,12 @@ async fn delete_entry(
     Extension(client): Extension<Client>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<StatusCode> {
-    let query_res = Entry::ddb_query(
-        client.clone(),
-        TABLE_NAME.to_string(),
-        pk.clone(),
-        sk.clone(),
-    )
-    .await?;
+    let query_res = Entry::ddb_query(client.clone(), pk.clone(), sk.clone()).await?;
 
     if query_res.is_empty() {
         return Ok(StatusCode::NOT_FOUND);
     }
 
-    Entry::ddb_delete(client, TABLE_NAME.to_string(), pk, sk).await?;
+    Entry::ddb_delete(client, pk, sk).await?;
     Ok(StatusCode::NO_CONTENT)
 }

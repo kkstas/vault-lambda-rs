@@ -2,6 +2,7 @@ use aws_sdk_dynamodb::{types::AttributeValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
+use super::TABLE_NAME;
 use crate::{utils::time::get_today_datetime, AResult};
 
 #[derive(Serialize, Deserialize)]
@@ -35,26 +36,22 @@ impl From<RecordFC> for Record {
 }
 
 impl Record {
-    pub async fn ddb_create(
-        client: Client,
-        table_name: String,
-        record_fc: RecordFC,
-    ) -> AResult<()> {
+    pub async fn ddb_create(client: Client, record_fc: RecordFC) -> AResult<()> {
         let item = to_item(Into::<Record>::into(record_fc))?;
 
         let req = client
             .put_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(client: Client, table_name: String, sk: String) -> AResult<()> {
+    pub async fn ddb_delete(client: Client, sk: String) -> AResult<()> {
         let req = client
             .delete_item()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key("pk", AttributeValue::S(String::from("Record")))
             .key("sk", AttributeValue::S(sk));
 
@@ -62,10 +59,10 @@ impl Record {
         Ok(())
     }
 
-    pub async fn ddb_query(client: Client, table_name: String, sk: String) -> AResult<Vec<Record>> {
+    pub async fn ddb_query(client: Client, sk: String) -> AResult<Vec<Record>> {
         let query = client
             .query()
-            .table_name(table_name)
+            .table_name(TABLE_NAME.to_owned())
             .key_condition_expression("pk = :pk AND sk >= :sk")
             .expression_attribute_values(":pk", AttributeValue::S(String::from("Record")))
             .expression_attribute_values(":sk", AttributeValue::S(sk));
