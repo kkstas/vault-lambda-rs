@@ -1,0 +1,922 @@
+openapi: 3.0.3
+info:
+  title: test-api - OpenAPI 3.0
+  version: 3.0.3
+paths:
+
+  /api/v1/task:
+    post:
+      tags:
+        - task
+      summary: Create a new task
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskFC'
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/task/last-week:
+    get:
+      tags:
+        - task
+      summary: Get all tasks from last week
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProtoWithTasks'
+  
+  /api/v1/task/{pk}/{sk}:
+    delete:
+      tags:
+        - task
+      summary: Delete a Task
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of a task
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key of a task
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '204':
+          description: 'No content'
+
+    get:
+      tags:
+        - task
+      summary: Query tasks
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of a task
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key (or part of it) of a task
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '200':
+          description: 'Array of found tasks'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+  /api/v1/taskproto:
+    post:
+      tags:
+        - taskproto
+      summary: Create a new task proto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskProtoFC'
+      responses:
+        '201':
+          description: Created
+    
+    put:
+      tags:
+        - taskproto
+      summary: Update a task proto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskProtoFC'
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/taskproto/{pk}/{sk}:
+    get:
+      tags:
+        - taskproto
+      summary: Find single TaskProto
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of a TaskProto
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key of a TaskProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: 'TaskProto found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskProto'
+
+  /api/v1/taskproto/active:
+    get:
+      tags:
+        - taskproto
+      summary: List all active TaskProtos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskProto'
+  
+  /api/v1/taskproto/inactive:
+    get:
+      tags:
+        - taskproto
+      summary: List all inactive TaskProtos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskProtoInactive'
+
+  /api/v1/taskproto/active/{sk}:
+    put:
+      tags:
+        - taskproto
+      summary: Set TaskProto as Active
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of a TaskProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '201':
+          description: 'Created'
+  
+  /api/v1/taskproto/inactive/{sk}:
+    put:
+      tags:
+        - taskproto
+      summary: Set TaskProto as Inactive
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of a TaskProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '201':
+          description: 'Created'
+  
+
+  /api/v1/entry:
+    put:
+      tags:
+        - entry
+      summary: Put entry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryFC'
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/entry/{pk}/{sk}:
+    delete:
+      tags:
+        - entry
+      summary: Delete an Entry
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of an entry
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key of an entry
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '204':
+          description: 'No content'
+    get:
+      tags:
+        - entry
+      summary: Query entries
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of an entry
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key (or part of it) of an entry
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '200':
+          description: 'Array of found entries'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entry'
+        
+      
+  /api/v1/entry/{date}:
+    get:
+      tags:
+        - entry
+      summary: Find entries by date
+      parameters:
+        - name: 'date'
+          in: path
+          description: Date of the entries
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: 'Array of found entries'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProtoWithEntries'
+
+
+  /api/v1/entry/last-week:
+    get:
+      tags:
+        - entry
+      summary: Get all entries from last week
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProtoWithEntries'
+        
+  /api/v1/entryproto:
+    put:
+      tags:
+        - entryproto
+      summary: Put EntryProto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryProtoFC'
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/entryproto/{pk}/{sk}:
+    get:
+      tags:
+        - entryproto
+      summary: Find single EntryProto
+      parameters:
+        - name: 'pk'
+          in: path
+          description: Partition key of an EntryProto
+          schema:
+            type: string
+          required: true
+        - name: 'sk'
+          in: path
+          description: Sort key of an EntryProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: 'EntryProto found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryProto'
+  
+  /api/v1/entryproto/active:
+    get:
+      tags:
+        - entryproto
+      summary: List all active EntryProtos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryProto'
+  
+  /api/v1/entryproto/inactive:
+    get:
+      tags:
+        - entryproto
+      summary: List all inactive EntryProtos
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryProto'
+
+  /api/v1/entryproto/active/{sk}:
+    put:
+      tags:
+        - entryproto
+      summary: Set EntryProto as Active
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of an EntryProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '201':
+          description: 'Created'
+  
+  /api/v1/entryproto/inactive/{sk}:
+    put:
+      tags:
+        - entryproto
+      summary: Set EntryProto as Inactive
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of an EntryProto
+          schema:
+            type: string
+          required: true
+      responses:
+        '201':
+          description: 'Created'
+
+
+  /api/v1/record:
+    post:
+      tags:
+        - record
+      summary: Create a new record
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordFC'
+      responses:
+        '201':
+          description: Created
+  
+  /api/v1/record/{sk}:
+    delete:
+      tags:
+        - record
+      summary: Delete a Record
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of a record
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '204':
+          description: 'No content'
+    
+    get:
+      tags:
+        - record
+      summary: Query records
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key (or part of it) of a record
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '200':
+          description: 'Array of found records'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+
+  /api/v1/record/last-week:
+    get:
+      tags:
+        - record
+      summary: Get all records from last week
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+
+  /api/v1/archive/all:
+    get:
+      tags:
+        - archive
+      summary: Get all ArchiveEntries
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArchiveEntry'
+    
+
+  /api/v1/archive:
+    post:
+      tags:
+        - archive
+      summary: Create a new ArchiveEntry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveEntryFC'
+      responses:
+        '201':
+          description: Created
+  
+  
+  /api/v1/archive/{sk}:
+    delete:
+      tags:
+        - archive
+      summary: Delete an ArchiveEntry
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of an archive entry
+          schema:
+            type: string
+          required: true
+
+      responses:
+        '204':
+          description: 'No content'
+  
+  /api/v1/archive/increment/{sk}:
+    put:
+      tags:
+        - archive
+      summary: Increment read times of an ArchiveEntry
+      parameters:
+        - name: 'sk'
+          in: path
+          description: Sort key of an archive entry
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: 'OK'
+  
+  /api/v1/common:
+    get:
+      tags:
+        - common
+      summary: Get all common data
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks_data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProtoWithTasks'
+                  entries_data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProtoWithEntries'
+                  records_data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Record'
+                required:
+                  - tasks_data
+                  - entries_data
+                  - records_data
+    
+        
+components:
+  schemas:
+    
+    ProtoWithTasks:
+      type: object
+      properties:
+        proto:
+          $ref: '#/components/schemas/TaskProto'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+      required:
+        - proto
+        - tasks
+
+    Task:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: Task::Workout
+        sk:
+          type: string
+          example: 2021-08-01T00:00:00Z
+        readable_name:
+          type: string
+          example: Workout
+        description:
+          type: string
+          example: Ran 5 miles, did 50 pushups, and 50 situps
+        streak:
+          type: integer
+          example: 5
+        rep_number:
+          type: integer
+          example: 1
+        total_time:
+          type: string
+          example: 00:30:00
+      required:
+        - pk
+        - sk
+        - readable_name
+      
+    TaskFC:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: Task::Workout
+        description:
+          type: string
+          example: Ran 5 km, did 10 pushups
+        total_time:
+          type: string 
+          example: "00:22:15"
+      required:
+        - pk 
+
+    TaskProtoInactive:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: TaskProto::Inactive
+        sk:
+          type: string
+          example: Task::Workout
+        readable_name:
+          type: string
+          example: Workout
+        has_description:
+          type: boolean
+          example: true
+        has_streak:
+          type: boolean
+          example: true
+        has_reps:
+          type: boolean
+          example: true
+        daily_reps_minimum:
+          type: integer
+          example: 10
+        weekly_streak_tolerance:
+          type: integer
+          example: 5
+        is_timed:
+          type: boolean
+          example: true
+      required:
+        - pk
+        - sk
+        - readable_name
+        - has_description
+        - has_streak
+        - has_reps
+        - daily_reps_minimum
+        - weekly_streak_tolerance
+        - is_timed
+
+    TaskProto:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: TaskProto::Active
+        sk:
+          type: string
+          example: Task::Workout
+        readable_name:
+          type: string
+          example: Workout
+        has_description:
+          type: boolean
+          example: true
+        has_streak:
+          type: boolean
+          example: true
+        has_reps:
+          type: boolean
+          example: true
+        daily_reps_minimum:
+          type: integer
+          example: 10
+        weekly_streak_tolerance:
+          type: integer
+          example: 5
+        is_timed:
+          type: boolean
+          example: true
+      required:
+        - pk
+        - sk
+        - readable_name
+        - has_description
+        - has_streak
+        - has_reps
+        - daily_reps_minimum
+        - weekly_streak_tolerance
+        - is_timed
+      
+    TaskProtoFC:
+      type: object
+      properties:
+        sk:
+          type: string
+          example: Task::Workout
+        readable_name:
+          type: string
+          example: Workout
+        has_description:
+          type: boolean
+          example: true
+        has_streak:
+          type: boolean
+          example: true
+        has_reps:
+          type: boolean
+          example: true
+        daily_reps_minimum:
+          type: integer
+          example: 10
+        weekly_streak_tolerance:
+          type: integer
+          example: 5
+        is_timed:
+          type: boolean
+          example: true
+      required:
+        - sk
+        - readable_name
+        - has_description
+        - has_streak
+        - has_reps
+        - is_timed
+    
+    ProtoWithEntries:
+      type: object
+      properties:
+        proto:
+          $ref: '#/components/schemas/EntryProto'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+      required:
+        - proto
+        - entries
+
+    Entry:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: Entry::Dream
+        sk:
+          type: string
+          example: "2021-08-01T00:00:00Z"
+        title:
+          type: string
+          example: Dream
+        content:
+          type: string
+          example: I was flying
+      required:
+        - pk
+        - sk
+        - title
+        - content
+
+    EntryFC:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: "Entry::Dream"
+        content:
+          type: string
+          example: I was flying
+      required:
+        - pk
+        - content
+    
+    EntryProtoInactive:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: EntryProto::Inactive
+        sk:
+          type: string
+          example: Entry::Dream
+        title:
+          type: string
+          example: Dream
+      required:
+        - pk
+        - sk
+        - title
+    
+    EntryProto:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: EntryProto::Active
+        sk:
+          type: string
+          example: "Entry::Dream"
+        title:
+          type: string
+          example: Dream
+      required:
+        - pk
+        - sk
+        - title
+  
+    EntryProtoFC:
+      type: object
+      properties:
+        sk:
+          type: string
+          example: "Entry::Dream"
+        title:
+          type: string
+          example: Dream
+      required:
+        - sk
+        - title
+    
+    Record:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: "Record"
+        sk:
+          type: string
+          example: "2021-08-01T00:00:00Z"
+        name:
+          type: string
+          example: Meal 
+        amount:
+          type: integer
+          example: 3
+        unit:
+          type: string
+          example: kcal
+      required:
+        - pk
+        - sk
+        - name
+        - amount
+          
+    RecordFC:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Meal
+        amount:
+          type: integer
+          example: 3
+        unit:
+          type: string
+          example: kcal
+      required:
+        - name
+        - amount
+
+    ArchiveEntry:
+      type: object
+      properties:
+        pk:
+          type: string
+          example: Archive::Entry
+        sk:
+          type: string
+          example: "2021-08-01T00:00:00Z"
+        content:
+          type: string
+          example: "How did you come to that decision?"
+        categories:
+          type: array
+          items:
+            type: string
+          example: ["decision-making", "philosophy"]
+        read_times:
+          type: integer
+          example: 3
+      required:
+        - pk
+        - sk
+        - content
+        - read_times
+    
+    ArchiveEntryFC:
+      type: object
+      properties:
+        content:
+          type: string
+          example: "How did you come to that decision?"
+        categories:
+          type: array
+          items:
+            type: string
+          example: ["decision-making", "philosophy"]
+      required:
+        - content
+    
+    
