@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: test-api - OpenAPI 3.0
+  title: vault-lambda-rs- OpenAPI 3.0
   version: 3.0.3
 paths:
 
@@ -418,6 +418,36 @@ paths:
       responses:
         '201':
           description: Created
+      
+    get:
+      tags:
+        - record
+      summary: Query records
+      parameters:
+        - name: 'from'
+          in: query
+          description: Query records from given date
+          schema:
+            type: string
+          required: true
+          example: 2024-04-26
+        - name: 'to'
+          in: query
+          description: Query records up to (but not including) given date
+          schema:
+            type: string
+          required: true
+          example: 2024-05-01
+
+      responses:
+        '200':
+          description: 'Array of found records'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordQueryResponse'
   
   /api/v1/record/{sk}:
     delete:
@@ -435,28 +465,7 @@ paths:
       responses:
         '204':
           description: 'No content'
-    
-    get:
-      tags:
-        - record
-      summary: Query records
-      parameters:
-        - name: 'sk'
-          in: path
-          description: Sort key (or part of it) of a record
-          schema:
-            type: string
-          required: true
 
-      responses:
-        '200':
-          description: 'Array of found records'
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Record'
 
   /api/v1/record/last-week:
     get:
@@ -862,6 +871,24 @@ components:
         - sk
         - name
         - amount
+        
+    RecordQueryResponse:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/Record"
+        from:
+          type: string
+          example: "2024-04-26"
+        to:
+          type: string
+          example: "2024-05-01"
+      required:
+        - records
+        - from
+        - to
           
     RecordFC:
       type: object
@@ -918,5 +945,4 @@ components:
           example: ["decision-making", "philosophy"]
       required:
         - content
-    
     

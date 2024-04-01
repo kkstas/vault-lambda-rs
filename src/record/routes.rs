@@ -1,8 +1,9 @@
 use aws_sdk_dynamodb::Client;
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Extension, Json, Router};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::{Record, RecordFC};
@@ -14,15 +15,29 @@ pub fn router() -> Router {
         .route("/", post(create))
         .route("/:sk", delete(delete_task))
         .route("/last-week", get(find_last_week_handler))
-        .route("/:sk", get(query))
+        .route("/", get(query))
+}
+
+#[derive(Deserialize)]
+struct QueryParams {
+    from: String,
+    to: String,
 }
 
 async fn query(
-    Extension(db_client): Extension<Client>,
-    Path(sk): Path<String>,
+    Extension(client): Extension<Client>,
+    Query(query): Query<QueryParams>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = Record::ddb_query(db_client, sk).await?;
-    return Ok((StatusCode::OK, Json(json!(response))));
+    let response =
+        Record::ddb_query_from_to(client.clone(), query.from.clone(), query.to.clone()).await?;
+    return Ok((
+        StatusCode::OK,
+        Json(json!({
+            "records": response,
+            "from": query.from,
+            "to": query.to
+        })),
+    ));
 }
 
 async fn create(

@@ -59,6 +59,36 @@ impl Record {
         Ok(())
     }
 
+    pub async fn ddb_query_from_to(
+        client: Client,
+        from: String,
+        to: String,
+    ) -> AResult<Vec<Record>> {
+        let res = client
+            .execute_statement()
+            .statement(format!(
+                r#"SELECT * FROM "{}" WHERE "pk" = ? AND "sk" >= ? AND "sk" <= ?"#,
+                TABLE_NAME
+            ))
+            .set_parameters(Some(vec![
+                AttributeValue::S("Record".to_string()),
+                AttributeValue::S(from),
+                AttributeValue::S(to),
+            ]))
+            .send()
+            .await?;
+
+        match res.items {
+            Some(items) => {
+                let records: Vec<Record> = from_items(items)?;
+                return Ok(records);
+            }
+            None => {
+                return Err(anyhow::Error::msg("Error querying DynamoDB Records. {:?}").into());
+            }
+        }
+    }
+
     pub async fn ddb_query(client: Client, sk: String) -> AResult<Vec<Record>> {
         let query = client
             .query()
