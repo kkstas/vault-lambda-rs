@@ -1,5 +1,6 @@
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
-use chrono::{Duration, FixedOffset, Utc};
+use chrono::{Duration, Utc};
+use chrono_tz::Europe;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
@@ -269,8 +270,7 @@ impl Task {
     }
 
     async fn last_7_days_of_given_task(client: Client, pk: String) -> AResult<Vec<Task>> {
-        let tz_offset = FixedOffset::east_opt(1 * 3600).unwrap();
-        let week_ago = (Utc::now().with_timezone(&tz_offset) + Duration::days(-7))
+        let week_ago = (Utc::now().with_timezone(&Europe::Warsaw) + Duration::days(-7))
             .format("%Y-%m-%d")
             .to_string();
 
