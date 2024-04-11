@@ -248,7 +248,7 @@ impl Task {
     ) -> AResult<u32> {
         let mut streak: u32 = 1; // If there are no tasks for the last 7 days, the streak starts at 1
 
-        for day in 0..weekly_streak_tolerance {
+        for day in 1..=(weekly_streak_tolerance + 1) {
             let date = get_date_x_days_ago(day as i64);
 
             if let Some(t) = last_week_tasks
@@ -391,5 +391,67 @@ mod tests {
         assert_eq!(Task::compute_non_reps_streak(4, v.clone()).unwrap(), 7);
         assert_eq!(Task::compute_non_reps_streak(3, v.clone()).unwrap(), 1);
         assert_eq!(Task::compute_non_reps_streak(1, v).unwrap(), 1);
+
+        let v2 = vec![
+            Task {
+                streak: Some(6),
+                sk: get_date_x_days_ago(1),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(5),
+                sk: get_date_x_days_ago(2),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(4),
+                sk: get_date_x_days_ago(3),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(3),
+                sk: get_date_x_days_ago(4),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(2),
+                sk: get_date_x_days_ago(5),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(1),
+                sk: get_date_x_days_ago(6),
+                ..Default::default()
+            },
+        ];
+
+        assert_eq!(Task::compute_non_reps_streak(4, v2.clone()).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(3, v2.clone()).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(2, v2.clone()).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(1, v2.clone()).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(0, v2).unwrap(), 7);
+
+        let v3 = vec![
+            Task {
+                streak: Some(3),
+                sk: get_date_x_days_ago(3),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(2),
+                sk: get_date_x_days_ago(4),
+                ..Default::default()
+            },
+            Task {
+                streak: Some(1),
+                sk: get_date_x_days_ago(5),
+                ..Default::default()
+            },
+        ];
+
+        assert_eq!(Task::compute_non_reps_streak(3, v3.clone()).unwrap(), 4);
+        assert_eq!(Task::compute_non_reps_streak(2, v3.clone()).unwrap(), 4);
+        assert_eq!(Task::compute_non_reps_streak(1, v3.clone()).unwrap(), 1);
+        assert_eq!(Task::compute_non_reps_streak(0, v3).unwrap(), 1);
     }
 }
