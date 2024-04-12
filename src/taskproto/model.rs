@@ -18,6 +18,7 @@ pub struct TaskProto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weekly_streak_tolerance: Option<u8>,
     pub is_timed: bool,
+    pub priority: i64,
 }
 
 #[derive(Deserialize, Clone)]
@@ -32,6 +33,7 @@ pub struct TaskProtoFC {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weekly_streak_tolerance: Option<u8>,
     pub is_timed: bool,
+    pub priority: i64,
 }
 
 impl TaskProto {
@@ -46,6 +48,7 @@ impl TaskProto {
             daily_reps_minimum: t_fc.daily_reps_minimum,
             weekly_streak_tolerance: t_fc.weekly_streak_tolerance,
             is_timed: t_fc.is_timed,
+            priority: t_fc.priority,
         }
     }
 }
@@ -125,13 +128,6 @@ impl TaskProto {
     }
 
     pub async fn create(client: Client, task_list_entry_fc: TaskProtoFC) -> AResult<()> {
-        let active_tp_exists = TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Active"),
-            task_list_entry_fc.sk.clone(),
-        )
-        .await
-        .is_ok();
         let inactive_tp_exists = TaskProto::ddb_find(
             client.clone(),
             String::from("TaskProto::Inactive"),
@@ -140,7 +136,7 @@ impl TaskProto {
         .await
         .is_ok();
 
-        if active_tp_exists || inactive_tp_exists {
+        if inactive_tp_exists {
             return Err(anyhow::Error::msg("TaskProto with given sort key already exists").into());
         }
 
@@ -281,7 +277,8 @@ impl TaskProto {
         let res = query.send().await?;
         match res.items {
             Some(items) => {
-                let tasks: Vec<TaskProto> = from_items(items)?;
+                let mut tasks: Vec<TaskProto> = from_items(items)?;
+                tasks.sort_by(|a, b| b.priority.cmp(&a.priority));
                 return Ok(tasks);
             }
             None => {
@@ -303,7 +300,8 @@ impl TaskProto {
         let res = query.send().await?;
         match res.items {
             Some(items) => {
-                let tasks: Vec<TaskProto> = from_items(items)?;
+                let mut tasks: Vec<TaskProto> = from_items(items)?;
+                tasks.sort_by(|a, b| b.priority.cmp(&a.priority));
                 return Ok(tasks);
             }
             None => {
