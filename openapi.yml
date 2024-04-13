@@ -667,6 +667,9 @@ components:
         is_timed:
           type: boolean
           example: true
+        priority:
+          type: integer
+          example: 100
       required:
         - pk
         - sk
@@ -708,6 +711,9 @@ components:
         is_timed:
           type: boolean
           example: true
+        priority:
+          type: integer
+          example: 100
       required:
         - pk
         - sk
@@ -718,6 +724,7 @@ components:
         - daily_reps_minimum
         - weekly_streak_tolerance
         - is_timed
+        - priority
       
     TaskProtoFC:
       type: object
@@ -746,6 +753,9 @@ components:
         is_timed:
           type: boolean
           example: true
+        priority:
+          type: integer
+          example: 100
       required:
         - sk
         - readable_name
@@ -753,6 +763,7 @@ components:
         - has_streak
         - has_reps
         - is_timed
+        - priority
     
     ProtoWithEntries:
       type: object
