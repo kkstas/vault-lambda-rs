@@ -1,7 +1,6 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client;
 use axum::http::StatusCode;
-use axum::Extension;
 use axum::{routing::get, Router};
 use lambda_http::{run, tracing, Error};
 use std::env::set_var;
@@ -18,10 +17,20 @@ pub mod utils;
 
 pub use error::{AError, AResult};
 
+#[derive(Clone)]
+pub struct AppState {
+    pub table_name: String,
+    pub dynamodb_client: aws_sdk_dynamodb::Client,
+}
+
 #[tokio::main]
 async fn main() -> std::result::Result<(), Error> {
     let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let client = Client::new(&config);
+
+    let state = AppState {
+        table_name: "vault_tasks".to_string(),
+        dynamodb_client: Client::new(&config),
+    };
 
     // If you use API Gateway stages, the Rust Runtime will include the stage name
     // as part of the path that your application receives.
@@ -43,7 +52,7 @@ async fn main() -> std::result::Result<(), Error> {
         .nest("/api/v1/record", record::router())
         .nest("/api/v1/archive", archive::router())
         .nest("/api/v1/common", common::router())
-        .layer(Extension(client));
+        .with_state(state);
 
     run(app).await
 }

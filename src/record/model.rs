@@ -1,9 +1,8 @@
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
-use super::TABLE_NAME;
-use crate::{utils::time::get_today_datetime, AResult};
+use crate::{utils::time::get_today_datetime, AResult, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Record {
@@ -36,44 +35,47 @@ impl From<RecordFC> for Record {
 }
 
 impl Record {
-    pub async fn ddb_create(client: Client, record_fc: RecordFC) -> AResult<()> {
+    pub async fn ddb_create(state: &AppState, record_fc: RecordFC) -> AResult<()> {
         let item = to_item(Into::<Record>::into(record_fc))?;
 
-        let req = client
+        let req = state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(client: Client, sk: String) -> AResult<()> {
-        let req = client
+    pub async fn ddb_delete(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let req = state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(String::from("Record")))
-            .key("sk", AttributeValue::S(sk));
+            .key("sk", AttributeValue::S(sk.into()));
 
         req.send().await?;
         Ok(())
     }
 
     pub async fn ddb_query_from_to(
-        client: Client,
-        from: String,
-        to: String,
+        state: &AppState,
+        from: impl Into<String>,
+        to: impl Into<String>,
     ) -> AResult<Vec<Record>> {
-        let res = client
+        let res = state
+            .dynamodb_client
             .execute_statement()
             .statement(format!(
                 r#"SELECT * FROM "{}" WHERE "pk" = ? AND "sk" >= ? AND "sk" <= ?"#,
-                TABLE_NAME
+                state.table_name
             ))
             .set_parameters(Some(vec![
                 AttributeValue::S("Record".to_string()),
-                AttributeValue::S(from),
-                AttributeValue::S(to),
+                AttributeValue::S(from.into()),
+                AttributeValue::S(to.into()),
             ]))
             .send()
             .await?;
@@ -89,13 +91,14 @@ impl Record {
         }
     }
 
-    pub async fn ddb_query(client: Client, sk: String) -> AResult<Vec<Record>> {
-        let query = client
+    pub async fn ddb_query(state: &AppState, sk: impl Into<String>) -> AResult<Vec<Record>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk AND sk >= :sk")
             .expression_attribute_values(":pk", AttributeValue::S(String::from("Record")))
-            .expression_attribute_values(":sk", AttributeValue::S(sk));
+            .expression_attribute_values(":sk", AttributeValue::S(sk.into()));
 
         let res = query.send().await?;
         match res.items {

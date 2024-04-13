@@ -1,9 +1,7 @@
-use crate::AResult;
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use crate::{AResult, AppState};
+use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
-
-use super::TABLE_NAME;
 
 #[derive(Serialize, Deserialize)]
 pub struct EntryProto {
@@ -12,7 +10,7 @@ pub struct EntryProto {
     pub title: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct EntryProtoFC {
     pub sk: String,
     pub title: String,
@@ -29,18 +27,13 @@ impl From<EntryProtoFC> for EntryProto {
 }
 
 impl EntryProto {
-    pub async fn set_as_inactive(client: Client, sk: String) -> AResult<()> {
+    pub async fn set_as_inactive(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let sk = sk.into();
         if !(sk.starts_with("Entry::")) {
             return Err(anyhow::Error::msg("Invalid EntryProto sort key").into());
         }
 
-        let active_query_res = match EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Active"),
-            sk.clone(),
-        )
-        .await
-        {
+        let active_query_res = match EntryProto::ddb_find(state, "EntryProto::Active", &sk).await {
             Ok(res) => res,
             Err(_) => {
                 return Err(anyhow::Error::msg(
@@ -50,13 +43,9 @@ impl EntryProto {
             }
         };
 
-        if EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Inactive"),
-            sk.clone(),
-        )
-        .await
-        .is_ok()
+        if EntryProto::ddb_find(state, "EntryProto::Inactive", &sk)
+            .await
+            .is_ok()
         {
             return Err(
                 anyhow::Error::msg("EntryProto already exists in DynamoDB as inactive").into(),
@@ -69,42 +58,34 @@ impl EntryProto {
             title: active_query_res.title.clone(),
         };
         let item = to_item(entry)?;
-        client
+        state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item))
             .send()
             .await?;
 
-        EntryProto::ddb_delete(client, String::from("EntryProto::Active"), sk).await?;
+        EntryProto::ddb_delete(state, "EntryProto::Active", sk).await?;
         Ok(())
     }
 
-    pub async fn set_as_active(client: Client, sk: String) -> AResult<()> {
+    pub async fn set_as_active(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let sk = sk.into();
         if !(sk.starts_with("Entry::")) {
             return Err(anyhow::Error::msg("Invalid EntryProto sort key").into());
         }
 
-        if EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Active"),
-            sk.clone(),
-        )
-        .await
-        .is_ok()
+        if EntryProto::ddb_find(state, "EntryProto::Active", &sk)
+            .await
+            .is_ok()
         {
             return Err(
                 anyhow::Error::msg("EntryProto already exists in DynamoDB as active").into(),
             );
         }
 
-        let inactive_entry = match EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Inactive"),
-            sk.clone(),
-        )
-        .await
-        {
+        let inactive_entry = match EntryProto::ddb_find(state, "EntryProto::Inactive", &sk).await {
             Ok(res) => res,
             Err(_) => {
                 return Err(
@@ -120,25 +101,22 @@ impl EntryProto {
         };
 
         let item = to_item(entry)?;
-        client
+        state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item))
             .send()
             .await?;
 
-        EntryProto::ddb_delete(client, String::from("EntryProto::Inactive"), sk).await?;
+        EntryProto::ddb_delete(state, "EntryProto::Inactive", sk).await?;
         Ok(())
     }
 
-    pub async fn ddb_put_item(client: Client, entry_proto_fc: EntryProtoFC) -> AResult<()> {
-        if EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Inactive"),
-            entry_proto_fc.sk.clone(),
-        )
-        .await
-        .is_ok()
+    pub async fn ddb_put_item(state: &AppState, entry_proto_fc: EntryProtoFC) -> AResult<()> {
+        if EntryProto::ddb_find(state, "EntryProto::Inactive", &entry_proto_fc.sk)
+            .await
+            .is_ok()
         {
             return Err(
                 anyhow::Error::msg("EntryProto already exists in DynamoDB as inactive").into(),
@@ -151,33 +129,41 @@ impl EntryProto {
             title: entry_proto_fc.title,
         };
         let item = to_item(entry)?;
-        client
+        state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item))
             .send()
             .await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
+    pub async fn ddb_delete(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<()> {
+        let pk = pk.into();
         if !pk.starts_with("EntryProto::") {
             return Err(anyhow::Error::msg("Invalid EntryProto primary key").into());
         }
-        client
+        state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S(sk))
+            .key("sk", AttributeValue::S(sk.into()))
             .send()
             .await?;
         Ok(())
     }
 
-    pub async fn ddb_list_active(client: Client) -> AResult<Vec<EntryProto>> {
-        let query = client
+    pub async fn ddb_list_active(state: &AppState) -> AResult<Vec<EntryProto>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",
@@ -196,7 +182,13 @@ impl EntryProto {
         }
     }
 
-    pub async fn ddb_find(client: Client, pk: String, sk: String) -> AResult<EntryProto> {
+    pub async fn ddb_find(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<EntryProto> {
+        let pk = pk.into();
+        let sk = sk.into();
         if (pk != "EntryProto::Active") && (pk != "EntryProto::Inactive") {
             return Err(
                 anyhow::Error::msg("Invalid EntryProto query partition key argument").into(),
@@ -206,9 +198,10 @@ impl EntryProto {
         if !sk.starts_with("Entry::") {
             return Err(anyhow::Error::msg("Invalid EntryProto query sort key argument").into());
         }
-        let res = client
+        let res = state
+            .dynamodb_client
             .get_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
             .send()
@@ -221,10 +214,11 @@ impl EntryProto {
         Ok(from_item(item)?)
     }
 
-    pub async fn ddb_list_inactive(client: Client) -> AResult<Vec<EntryProto>> {
-        let query = client
+    pub async fn ddb_list_inactive(state: &AppState) -> AResult<Vec<EntryProto>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",

@@ -1,11 +1,12 @@
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use aws_sdk_dynamodb::types::AttributeValue;
 use chrono::{Duration, Utc};
 use chrono_tz::Europe;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
+use std::convert::Into;
 
-use super::TABLE_NAME;
 use crate::utils::time::{get_date_x_days_ago, get_today_datetime};
+use crate::AppState;
 use crate::{taskproto::TaskProto, AResult};
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -40,16 +41,10 @@ pub struct TaskFC {
 
 // DynamoDB handlers
 impl Task {
-    pub async fn ddb_create(client: Client, task_fc: TaskFC) -> AResult<()> {
+    pub async fn ddb_create(state: &AppState, task_fc: TaskFC) -> AResult<()> {
         let mut task_to_create: Task = Task::default();
 
-        let task_proto = match TaskProto::ddb_find(
-            client.clone(),
-            "TaskProto::Active".to_string(),
-            task_fc.pk.clone(),
-        )
-        .await
-        {
+        let task_proto = match TaskProto::ddb_find(&state, "TaskProto::Active", &task_fc.pk).await {
             Ok(res) => res,
             Err(_) => {
                 return Err(anyhow::Error::msg(format!(
@@ -60,9 +55,9 @@ impl Task {
             }
         };
 
-        task_to_create.pk = task_proto.sk.clone();
+        task_to_create.pk = task_proto.sk;
         task_to_create.sk = get_today_datetime();
-        task_to_create.readable_name = task_proto.readable_name.clone();
+        task_to_create.readable_name = task_proto.readable_name;
 
         if task_proto.has_description {
             if let Some(description) = &task_fc.description {
@@ -78,13 +73,13 @@ impl Task {
 
         if task_proto.has_streak == true {
             let last_week_tasks =
-                Task::last_7_days_of_given_task(client.clone(), task_to_create.pk.clone()).await?;
+                Task::last_7_days_of_given_task(&state, &task_to_create.pk).await?;
 
             if task_proto.has_reps == true {
                 let current_rep_data = Task::compute_reps_streak(
                     task_proto.daily_reps_minimum.unwrap(),
                     task_proto.weekly_streak_tolerance.unwrap(),
-                    last_week_tasks.clone(),
+                    &last_week_tasks,
                 )?;
                 task_to_create.streak = Some(current_rep_data.streak);
                 task_to_create.rep_number = Some(current_rep_data.rep_number);
@@ -98,44 +93,55 @@ impl Task {
 
                 task_to_create.streak = Some(Task::compute_non_reps_streak(
                     task_proto.weekly_streak_tolerance.unwrap(),
-                    Task::last_7_days_of_given_task(client.clone(), task_to_create.pk.clone())
-                        .await?,
+                    &Task::last_7_days_of_given_task(&state, &task_to_create.pk).await?,
                 )?);
             }
         }
 
         let item = to_item(task_to_create)?;
 
-        let req = client
+        let req = state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
+    pub async fn ddb_delete(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<()> {
+        let pk = pk.into();
         if !pk.starts_with("Task::") {
             return Err(anyhow::Error::msg("Invalid Task primary key").into());
         }
-        let req = client
+        let req = state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S(sk));
+            .key("sk", AttributeValue::S(sk.into()));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_query(client: Client, pk: String, sk: String) -> AResult<Vec<Task>> {
-        let query = client
+    pub async fn ddb_query(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<Vec<Task>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk AND sk >= :sk")
-            .expression_attribute_values(":pk", AttributeValue::S(pk))
-            .expression_attribute_values(":sk", AttributeValue::S(sk));
+            .expression_attribute_values(":pk", AttributeValue::S(pk.into()))
+            .expression_attribute_values(":sk", AttributeValue::S(sk.into()));
 
         let res = query.send().await?;
         match res.items {
@@ -164,7 +170,7 @@ struct CurrentRepData {
 impl Task {
     fn get_streaks_with_reps_week_summary(
         daily_rep_minimum: u8,
-        last_week_tasks: Vec<Task>,
+        last_week_tasks: &Vec<Task>,
     ) -> Vec<RepTaskDaySummary> {
         let mut summary: Vec<RepTaskDaySummary> = Vec::new();
 
@@ -187,7 +193,7 @@ impl Task {
                 }
 
                 summary.push(RepTaskDaySummary {
-                    date: date.clone(),
+                    date,
                     streak: streak_that_day,
                 });
             }
@@ -198,13 +204,13 @@ impl Task {
     fn compute_reps_streak(
         daily_rep_minimum: u8,
         weekly_streak_tolerance: u8,
-        last_week_tasks: Vec<Task>,
+        last_week_tasks: &Vec<Task>,
     ) -> AResult<CurrentRepData> {
         let mut last_found_streak: u32 = 0; // streak starts at 0 if there are no tasks for the last 7 days & today's tasks are less than daily_rep_minimum
         let mut today_streak_point: u32 = 0;
 
         let summary: Vec<RepTaskDaySummary> =
-            Task::get_streaks_with_reps_week_summary(daily_rep_minimum, last_week_tasks.clone());
+            Task::get_streaks_with_reps_week_summary(daily_rep_minimum, last_week_tasks);
 
         for day in 0..weekly_streak_tolerance {
             let date = get_date_x_days_ago(day as i64);
@@ -244,7 +250,7 @@ impl Task {
 
     fn compute_non_reps_streak(
         weekly_streak_tolerance: u8,
-        last_week_tasks: Vec<Task>,
+        last_week_tasks: &Vec<Task>,
     ) -> AResult<u32> {
         let mut streak: u32 = 1; // If there are no tasks for the last 7 days, the streak starts at 1
 
@@ -269,12 +275,15 @@ impl Task {
         Ok(streak)
     }
 
-    async fn last_7_days_of_given_task(client: Client, pk: String) -> AResult<Vec<Task>> {
+    async fn last_7_days_of_given_task(
+        state: &AppState,
+        pk: impl Into<String>,
+    ) -> AResult<Vec<Task>> {
         let week_ago = (Utc::now().with_timezone(&Europe::Warsaw) + Duration::days(-7))
             .format("%Y-%m-%d")
             .to_string();
 
-        let tasks: Vec<Task> = Task::ddb_query(client.clone(), pk, week_ago.clone()).await?;
+        let tasks: Vec<Task> = Task::ddb_query(state, pk, week_ago).await?;
         Ok(tasks)
     }
 }
@@ -327,7 +336,7 @@ mod tests {
 
         let v = vec![t0, t1_1, t1_2, t1_3, t2_1, t2_2, t3_1, t3_2];
 
-        let result = Task::compute_reps_streak(2, 3, v).unwrap();
+        let result = Task::compute_reps_streak(2, 3, &v).unwrap();
         assert_eq!(result.streak, 7);
         assert_eq!(result.rep_number, 2);
     }
@@ -366,7 +375,7 @@ mod tests {
 
         let v = vec![t1_1, t1_2, t1_3, t2_1, t2_2, t3_1];
 
-        let result = Task::get_streaks_with_reps_week_summary(2, v);
+        let result = Task::get_streaks_with_reps_week_summary(2, &v);
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].streak, 6);
         assert_eq!(result[1].streak, 5);
@@ -388,9 +397,9 @@ mod tests {
 
         let v = vec![t1, t2, t3];
 
-        assert_eq!(Task::compute_non_reps_streak(4, v.clone()).unwrap(), 7);
-        assert_eq!(Task::compute_non_reps_streak(3, v.clone()).unwrap(), 1);
-        assert_eq!(Task::compute_non_reps_streak(1, v).unwrap(), 1);
+        assert_eq!(Task::compute_non_reps_streak(4, &v).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(3, &v).unwrap(), 1);
+        assert_eq!(Task::compute_non_reps_streak(1, &v).unwrap(), 1);
 
         let v2 = vec![
             Task {
@@ -425,11 +434,11 @@ mod tests {
             },
         ];
 
-        assert_eq!(Task::compute_non_reps_streak(4, v2.clone()).unwrap(), 7);
-        assert_eq!(Task::compute_non_reps_streak(3, v2.clone()).unwrap(), 7);
-        assert_eq!(Task::compute_non_reps_streak(2, v2.clone()).unwrap(), 7);
-        assert_eq!(Task::compute_non_reps_streak(1, v2.clone()).unwrap(), 7);
-        assert_eq!(Task::compute_non_reps_streak(0, v2).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(4, &v2).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(3, &v2).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(2, &v2).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(1, &v2).unwrap(), 7);
+        assert_eq!(Task::compute_non_reps_streak(0, &v2).unwrap(), 7);
 
         let v3 = vec![
             Task {
@@ -449,9 +458,9 @@ mod tests {
             },
         ];
 
-        assert_eq!(Task::compute_non_reps_streak(3, v3.clone()).unwrap(), 4);
-        assert_eq!(Task::compute_non_reps_streak(2, v3.clone()).unwrap(), 4);
-        assert_eq!(Task::compute_non_reps_streak(1, v3.clone()).unwrap(), 1);
-        assert_eq!(Task::compute_non_reps_streak(0, v3).unwrap(), 1);
+        assert_eq!(Task::compute_non_reps_streak(3, &v3).unwrap(), 4);
+        assert_eq!(Task::compute_non_reps_streak(2, &v3).unwrap(), 4);
+        assert_eq!(Task::compute_non_reps_streak(1, &v3).unwrap(), 1);
+        assert_eq!(Task::compute_non_reps_streak(0, &v3).unwrap(), 1);
     }
 }

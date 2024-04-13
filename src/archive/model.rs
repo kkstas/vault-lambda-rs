@@ -1,9 +1,9 @@
-use crate::{utils::time::get_today_datetime, AResult};
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use crate::{utils::time::get_today_datetime, AResult, AppState};
+use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
 
-use super::{ARCHIVE_SK, TABLE_NAME};
+use super::ARCHIVE_SK;
 
 #[derive(Serialize, Deserialize)]
 pub struct ArchiveEntry {
@@ -36,8 +36,8 @@ impl From<ArchiveEntryFC> for ArchiveEntry {
 }
 
 impl ArchiveEntry {
-    pub async fn ddb_increment_read_times(client: Client, sk: String) -> AResult<()> {
-        let mut found_arch = match ArchiveEntry::ddb_find(client.clone(), sk).await {
+    pub async fn ddb_increment_read_times(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let mut found_arch = match ArchiveEntry::ddb_find(state, sk).await {
             Ok(res) => res,
             Err(_) => {
                 return Err(anyhow::Error::msg(
@@ -48,31 +48,34 @@ impl ArchiveEntry {
         };
         found_arch.read_times += 1;
         let item = to_item(found_arch)?;
-        client
+        state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item))
             .send()
             .await?;
         Ok(())
     }
 
-    pub async fn ddb_create(client: Client, record_fc: ArchiveEntryFC) -> AResult<()> {
+    pub async fn ddb_create(state: &AppState, record_fc: ArchiveEntryFC) -> AResult<()> {
         let item = to_item(Into::<ArchiveEntry>::into(record_fc))?;
 
-        let req = client
+        let req = state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_find_all(client: Client) -> AResult<Vec<ArchiveEntry>> {
-        let query = client
+    pub async fn ddb_find_all(state: AppState) -> AResult<Vec<ArchiveEntry>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(state.table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(":pk", AttributeValue::S(String::from(ARCHIVE_SK)));
 
@@ -88,12 +91,13 @@ impl ArchiveEntry {
         }
     }
 
-    pub async fn ddb_find(client: Client, sk: String) -> AResult<ArchiveEntry> {
-        let res = client
+    pub async fn ddb_find(state: &AppState, sk: impl Into<String>) -> AResult<ArchiveEntry> {
+        let res = state
+            .dynamodb_client
             .get_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(String::from(ARCHIVE_SK)))
-            .key("sk", AttributeValue::S(sk))
+            .key("sk", AttributeValue::S(sk.into()))
             .send()
             .await?;
 
@@ -104,12 +108,13 @@ impl ArchiveEntry {
         Ok(from_item(item)?)
     }
 
-    pub async fn ddb_delete(client: Client, sk: String) -> AResult<()> {
-        client
+    pub async fn ddb_delete(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(String::from(ARCHIVE_SK)))
-            .key("sk", AttributeValue::S(sk))
+            .key("sk", AttributeValue::S(sk.into()))
             .send()
             .await?;
         Ok(())

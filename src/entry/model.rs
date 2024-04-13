@@ -1,11 +1,10 @@
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_items, to_item};
 
-use super::TABLE_NAME;
 use crate::entryproto::EntryProto;
 use crate::utils::time::get_date_x_days_ago;
-use crate::AResult;
+use crate::{AResult, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Entry {
@@ -22,13 +21,18 @@ pub struct EntryFC {
 }
 
 impl Entry {
-    pub async fn ddb_query(client: Client, pk: String, sk: String) -> AResult<Vec<Entry>> {
-        let query = client
+    pub async fn ddb_query(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<Vec<Entry>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk AND sk >= :sk")
-            .expression_attribute_values(":pk", AttributeValue::S(pk))
-            .expression_attribute_values(":sk", AttributeValue::S(sk));
+            .expression_attribute_values(":pk", AttributeValue::S(pk.into()))
+            .expression_attribute_values(":sk", AttributeValue::S(sk.into()));
 
         let res = query.send().await?;
         match res.items {
@@ -42,13 +46,8 @@ impl Entry {
         }
     }
 
-    pub async fn ddb_put_item(client: Client, entry_fc: EntryFC) -> AResult<()> {
-        let entry_proto = match EntryProto::ddb_find(
-            client.clone(),
-            String::from("EntryProto::Active"),
-            entry_fc.pk.clone(),
-        )
-        .await
+    pub async fn ddb_put_item(state: &AppState, entry_fc: EntryFC) -> AResult<()> {
+        let entry_proto = match EntryProto::ddb_find(state, "EntryProto::Active", entry_fc.pk).await
         {
             Ok(res) => res,
             Err(_) => {
@@ -60,30 +59,37 @@ impl Entry {
         };
 
         let entry = Entry {
-            pk: entry_proto.sk.clone(),
+            pk: entry_proto.sk,
             sk: get_date_x_days_ago(0),
-            title: entry_proto.title.clone(),
+            title: entry_proto.title,
             content: entry_fc.content,
         };
         let item = to_item(entry)?;
-        client
+        state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item))
             .send()
             .await?;
         Ok(())
     }
 
-    pub async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
+    pub async fn ddb_delete(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<()> {
+        let pk = pk.into();
         if !pk.starts_with("Entry::") {
             return Err(anyhow::Error::msg("Invalid Entry primary key").into());
         }
-        client
+        state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S(sk))
+            .key("sk", AttributeValue::S(sk.into()))
             .send()
             .await?;
         Ok(())

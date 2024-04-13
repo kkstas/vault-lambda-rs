@@ -1,9 +1,8 @@
-use aws_sdk_dynamodb::{types::AttributeValue, Client};
+use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::{from_item, from_items, to_item};
 
-use super::TABLE_NAME;
-use crate::AResult;
+use crate::{AResult, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct TaskProto {
@@ -21,7 +20,7 @@ pub struct TaskProto {
     pub priority: i64,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize)]
 pub struct TaskProtoFC {
     pub sk: String,            // Primary key of referenced task, e.g. "Task::Workout"
     pub readable_name: String, // Readable name of referenced task, e.g. "Workout"
@@ -37,9 +36,9 @@ pub struct TaskProtoFC {
 }
 
 impl TaskProto {
-    pub fn new(t_fc: TaskProtoFC, pk: String) -> Self {
+    pub fn new(t_fc: TaskProtoFC, pk: impl Into<String>) -> Self {
         Self {
-            pk,
+            pk: pk.into(),
             sk: t_fc.sk,
             readable_name: t_fc.readable_name,
             has_description: t_fc.has_description,
@@ -54,30 +53,22 @@ impl TaskProto {
 }
 
 impl TaskProto {
-    pub async fn set_as_active(client: Client, sk: String) -> AResult<()> {
-        let mut found_inactive_task = match TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Inactive"),
-            sk.clone(),
-        )
-        .await
-        {
-            Ok(res) => res,
-            Err(_) => {
-                return Err(anyhow::Error::msg(
-                    "Inactive TaskProto with given sort key does not exist",
-                )
-                .into())
-            }
-        };
+    pub async fn set_as_active(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let sk = sk.into();
+        let mut found_inactive_task =
+            match TaskProto::ddb_find(&state, "TaskProto::Inactive", &sk).await {
+                Ok(res) => res,
+                Err(_) => {
+                    return Err(anyhow::Error::msg(
+                        "Inactive TaskProto with given sort key does not exist",
+                    )
+                    .into())
+                }
+            };
 
-        if TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Active"),
-            sk.clone(),
-        )
-        .await
-        .is_ok()
+        if TaskProto::ddb_find(&state, "TaskProto::Active", &sk)
+            .await
+            .is_ok()
         {
             return Err(
                 anyhow::Error::msg("Active TaskProto with given sort key already exists").into(),
@@ -85,19 +76,14 @@ impl TaskProto {
         };
 
         found_inactive_task.pk = String::from("TaskProto::Active");
-        TaskProto::ddb_put_item(client.clone(), found_inactive_task).await?;
-        TaskProto::ddb_delete(client, String::from("TaskProto::Inactive"), sk).await?;
+        TaskProto::ddb_put_item(state, found_inactive_task).await?;
+        TaskProto::ddb_delete(state, "TaskProto::Inactive", sk).await?;
         Ok(())
     }
 
-    pub async fn set_as_inactive(client: Client, sk: String) -> AResult<()> {
-        let mut found_task = match TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Active"),
-            sk.clone(),
-        )
-        .await
-        {
+    pub async fn set_as_inactive(state: &AppState, sk: impl Into<String>) -> AResult<()> {
+        let sk = sk.into();
+        let mut found_task = match TaskProto::ddb_find(&state, "TaskProto::Active", &sk).await {
             Ok(res) => res,
             Err(_) => {
                 return Err(anyhow::Error::msg(
@@ -107,13 +93,9 @@ impl TaskProto {
             }
         };
 
-        if TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Inactive"),
-            sk.clone(),
-        )
-        .await
-        .is_ok()
+        if TaskProto::ddb_find(&state, "TaskProto::Inactive", &sk)
+            .await
+            .is_ok()
         {
             return Err(anyhow::Error::msg(
                 "Inactive TaskProto with given sort key already exists",
@@ -122,19 +104,16 @@ impl TaskProto {
         };
 
         found_task.pk = String::from("TaskProto::Inactive");
-        TaskProto::ddb_put_item(client.clone(), found_task).await?;
-        TaskProto::ddb_delete(client, String::from("TaskProto::Active"), sk).await?;
+        TaskProto::ddb_put_item(&state, found_task).await?;
+        TaskProto::ddb_delete(&state, "TaskProto::Active", sk).await?;
         Ok(())
     }
 
-    pub async fn create(client: Client, task_list_entry_fc: TaskProtoFC) -> AResult<()> {
-        let inactive_tp_exists = TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Inactive"),
-            task_list_entry_fc.sk.clone(),
-        )
-        .await
-        .is_ok();
+    pub async fn create(state: &AppState, task_list_entry_fc: TaskProtoFC) -> AResult<()> {
+        let inactive_tp_exists =
+            TaskProto::ddb_find(state, "TaskProto::Inactive", &task_list_entry_fc.sk)
+                .await
+                .is_ok();
 
         if inactive_tp_exists {
             return Err(anyhow::Error::msg("TaskProto with given sort key already exists").into());
@@ -174,28 +153,22 @@ impl TaskProto {
         }
 
         TaskProto::ddb_put_item(
-            client,
-            TaskProto::new(task_list_entry_fc, "TaskProto::Active".to_string()),
+            state,
+            TaskProto::new(task_list_entry_fc, "TaskProto::Active"),
         )
         .await?;
         return Ok(());
     }
 
-    pub async fn update(client: Client, task_list_entry_fu: TaskProtoFC) -> AResult<()> {
-        let active_tp_exists = TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Active"),
-            task_list_entry_fu.sk.clone(),
-        )
-        .await
-        .is_ok();
-        let inactive_tp_exists = TaskProto::ddb_find(
-            client.clone(),
-            String::from("TaskProto::Inactive"),
-            task_list_entry_fu.sk.clone(),
-        )
-        .await
-        .is_ok();
+    pub async fn update(state: &AppState, task_list_entry_fu: TaskProtoFC) -> AResult<()> {
+        let active_tp_exists =
+            TaskProto::ddb_find(state, "TaskProto::Active", &task_list_entry_fu.sk)
+                .await
+                .is_ok();
+        let inactive_tp_exists =
+            TaskProto::ddb_find(state, "TaskProto::Inactive", &task_list_entry_fu.sk)
+                .await
+                .is_ok();
 
         if !active_tp_exists && inactive_tp_exists {
             return Err(anyhow::Error::msg("TaskProto with given sort key does not exist").into());
@@ -205,20 +178,26 @@ impl TaskProto {
         }
 
         let task_list_entry_state = if active_tp_exists {
-            String::from("TaskProto::Active")
+            "TaskProto::Active"
         } else {
-            String::from("TaskProto::Inactive")
+            "TaskProto::Inactive"
         };
 
         let task_list_entry = TaskProto::new(task_list_entry_fu, task_list_entry_state);
-        TaskProto::ddb_put_item(client, task_list_entry).await?;
+        TaskProto::ddb_put_item(state, task_list_entry).await?;
         return Ok(());
     }
 }
 
 // Functions for direct interaction with DynamoDB
 impl TaskProto {
-    pub async fn ddb_find(client: Client, pk: String, sk: String) -> AResult<TaskProto> {
+    pub async fn ddb_find(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<TaskProto> {
+        let pk = pk.into();
+        let sk = sk.into();
         if (pk != "TaskProto::Active") && (pk != "TaskProto::Inactive") {
             return Err(
                 anyhow::Error::msg("Invalid TaskProto query partition key argument. {:?}").into(),
@@ -231,9 +210,10 @@ impl TaskProto {
             );
         }
 
-        let res = client
+        let res = state
+            .dynamodb_client
             .get_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
             .send()
@@ -246,7 +226,7 @@ impl TaskProto {
         Ok(from_item(item)?)
     }
 
-    async fn ddb_put_item(client: Client, task_list_entry: TaskProto) -> AResult<()> {
+    async fn ddb_put_item(state: &AppState, task_list_entry: TaskProto) -> AResult<()> {
         if (task_list_entry.pk != "TaskProto::Active")
             && (task_list_entry.pk != "TaskProto::Inactive")
         {
@@ -258,19 +238,21 @@ impl TaskProto {
 
         let item = to_item(task_list_entry)?;
 
-        let req = client
+        let req = state
+            .dynamodb_client
             .put_item()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .set_item(Some(item));
 
         req.send().await?;
         Ok(())
     }
 
-    pub async fn ddb_list_active(client: Client) -> AResult<Vec<TaskProto>> {
-        let query = client
+    pub async fn ddb_list_active(state: &AppState) -> AResult<Vec<TaskProto>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(":pk", AttributeValue::S("TaskProto::Active".to_string()));
 
@@ -287,10 +269,11 @@ impl TaskProto {
         }
     }
 
-    pub async fn ddb_list_inactive(client: Client) -> AResult<Vec<TaskProto>> {
-        let query = client
+    pub async fn ddb_list_inactive(state: &AppState) -> AResult<Vec<TaskProto>> {
+        let query = state
+            .dynamodb_client
             .query()
-            .table_name(TABLE_NAME.to_owned())
+            .table_name(&state.table_name)
             .key_condition_expression("pk = :pk")
             .expression_attribute_values(
                 ":pk",
@@ -310,18 +293,25 @@ impl TaskProto {
         }
     }
 
-    async fn ddb_delete(client: Client, pk: String, sk: String) -> AResult<()> {
+    async fn ddb_delete(
+        state: &AppState,
+        pk: impl Into<String>,
+        sk: impl Into<String>,
+    ) -> AResult<()> {
+        let pk = pk.into();
+        let sk = sk.into();
         if !pk.starts_with("TaskProto::") {
             return Err(anyhow::Error::msg("Invalid TaskProto primary key").into());
         }
         if !sk.starts_with("Task::") {
             return Err(anyhow::Error::msg("Invalid TaskProto sort key").into());
         }
-        let req = client
+        let req = state
+            .dynamodb_client
             .delete_item()
-            .table_name(TABLE_NAME.to_owned())
-            .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S(sk));
+            .table_name(&state.table_name)
+            .key("pk", AttributeValue::S(pk.into()))
+            .key("sk", AttributeValue::S(sk.into()));
 
         req.send().await?;
         Ok(())

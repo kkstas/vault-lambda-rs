@@ -1,15 +1,14 @@
-use aws_sdk_dynamodb::Client;
-use axum::extract::Path;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, put};
-use axum::{Extension, Json, Router};
+use axum::{Json, Router};
 use serde_json::{json, Value};
 
-use crate::AResult;
+use crate::{AResult, AppState};
 
 use super::{EntryProto, EntryProtoFC};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", put(put_entry_proto))
         .route("/:pk/:sk", get(find))
@@ -19,47 +18,43 @@ pub fn router() -> Router {
         .route("/inactive/:sk", put(set_as_inactive))
 }
 
-async fn list_active(
-    Extension(db_client): Extension<Client>,
-) -> AResult<(StatusCode, Json<Value>)> {
-    let response = EntryProto::ddb_list_active(db_client).await?;
+async fn list_active(State(state): State<AppState>) -> AResult<(StatusCode, Json<Value>)> {
+    let response = EntryProto::ddb_list_active(&state).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
-async fn list_inactive(
-    Extension(db_client): Extension<Client>,
-) -> AResult<(StatusCode, Json<Value>)> {
-    let response = EntryProto::ddb_list_inactive(db_client).await?;
+async fn list_inactive(State(state): State<AppState>) -> AResult<(StatusCode, Json<Value>)> {
+    let response = EntryProto::ddb_list_inactive(&state).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn set_as_active(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    EntryProto::set_as_active(client, sk).await?;
+    EntryProto::set_as_active(&state, sk).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn set_as_inactive(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    EntryProto::set_as_inactive(client, sk).await?;
+    EntryProto::set_as_inactive(&state, sk).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn find(
-    Extension(db_client): Extension<Client>,
+    State(state): State<AppState>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = EntryProto::ddb_find(db_client, pk, sk).await?;
+    let response = EntryProto::ddb_find(&state, pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn put_entry_proto(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Json(payload): Json<EntryProtoFC>,
 ) -> AResult<StatusCode> {
-    EntryProto::ddb_put_item(client, payload.clone()).await?;
+    EntryProto::ddb_put_item(&state, payload).await?;
     return Ok(StatusCode::CREATED);
 }

@@ -1,14 +1,13 @@
-use aws_sdk_dynamodb::Client;
-use axum::extract::Path;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post, put};
-use axum::{Extension, Json, Router};
+use axum::{Json, Router};
 use serde_json::{json, Value};
 
 use super::{TaskProto, TaskProtoFC};
-use crate::AResult;
+use crate::{AResult, AppState};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create))
         .route("/:pk/:sk", get(find))
@@ -20,56 +19,51 @@ pub fn router() -> Router {
 }
 
 async fn set_as_active(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    TaskProto::set_as_active(client, sk).await?;
+    TaskProto::set_as_active(&state, sk).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn set_as_inactive(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    TaskProto::set_as_inactive(client, sk).await?;
+    TaskProto::set_as_inactive(&state, sk).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn find(
-    Extension(db_client): Extension<Client>,
+    State(state): State<AppState>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskProto::ddb_find(db_client, pk, sk).await?;
+    let response = TaskProto::ddb_find(&state, pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn create(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Json(payload): Json<TaskProtoFC>,
 ) -> AResult<StatusCode> {
-    TaskProto::create(client, payload.clone()).await?;
-
+    TaskProto::create(&state, payload).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn update(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Json(payload): Json<TaskProtoFC>,
 ) -> AResult<StatusCode> {
-    TaskProto::update(client, payload.clone()).await?;
+    TaskProto::update(&state, payload).await?;
 
     return Ok(StatusCode::CREATED);
 }
 
-async fn list_active(
-    Extension(db_client): Extension<Client>,
-) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskProto::ddb_list_active(db_client).await?;
+async fn list_active(State(state): State<AppState>) -> AResult<(StatusCode, Json<Value>)> {
+    let response = TaskProto::ddb_list_active(&state).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
-async fn list_inactive(
-    Extension(db_client): Extension<Client>,
-) -> AResult<(StatusCode, Json<Value>)> {
-    let response = TaskProto::ddb_list_inactive(db_client).await?;
+async fn list_inactive(State(state): State<AppState>) -> AResult<(StatusCode, Json<Value>)> {
+    let response = TaskProto::ddb_list_inactive(&state).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }

@@ -1,17 +1,16 @@
-use aws_sdk_dynamodb::Client;
 use axum::{
-    extract::Path,
+    extract::{Path, State},
     http::StatusCode,
     routing::{delete, get, post, put},
-    Extension, Json, Router,
+    Json, Router,
 };
 use serde_json::{json, Value};
 
-use crate::AResult;
+use crate::{AResult, AppState};
 
 use super::{ArchiveEntry, ArchiveEntryFC};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/all", get(find_all))
         .route("/", post(create_handler))
@@ -19,31 +18,31 @@ pub fn router() -> Router {
         .route("/increment/:sk", put(increment_read_times_handler))
 }
 
-async fn find_all(Extension(db_client): Extension<Client>) -> AResult<(StatusCode, Json<Value>)> {
-    let response = ArchiveEntry::ddb_find_all(db_client).await?;
+async fn find_all(State(state): State<AppState>) -> AResult<(StatusCode, Json<Value>)> {
+    let response = ArchiveEntry::ddb_find_all(state).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn create_handler(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Json(payload): Json<ArchiveEntryFC>,
 ) -> AResult<StatusCode> {
-    ArchiveEntry::ddb_create(client, payload).await?;
+    ArchiveEntry::ddb_create(&state, payload).await?;
     return Ok(StatusCode::CREATED);
 }
 
 async fn delete_handler(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    ArchiveEntry::ddb_delete(client, sk).await?;
+    ArchiveEntry::ddb_delete(&state, sk).await?;
     return Ok(StatusCode::NO_CONTENT);
 }
 
 async fn increment_read_times_handler(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path(sk): Path<String>,
 ) -> AResult<StatusCode> {
-    ArchiveEntry::ddb_increment_read_times(client, sk).await?;
+    ArchiveEntry::ddb_increment_read_times(&state, sk).await?;
     return Ok(StatusCode::OK);
 }

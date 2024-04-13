@@ -1,22 +1,20 @@
 use std::collections::HashMap;
 
 use aws_sdk_dynamodb::types::{AttributeValue, KeysAndAttributes};
-use aws_sdk_dynamodb::Client;
-use axum::extract::Path;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, put};
-use axum::{Extension, Json, Router};
+use axum::{Json, Router};
 use serde::Serialize;
 use serde_dynamo::from_items;
 use serde_json::{json, Value};
 
-use super::TABLE_NAME;
 use super::{Entry, EntryFC};
 use crate::entryproto::EntryProto;
 use crate::utils::time::get_date_x_days_ago;
-use crate::AResult;
+use crate::{AResult, AppState};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", put(put_item))
         .route("/:pk/:sk", delete(delete_entry))
@@ -32,21 +30,20 @@ pub struct ProtoWithEntries {
 }
 
 async fn find_last_week_handler(
-    Extension(db_client): Extension<Client>,
+    State(state): State<AppState>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let result_entries = find_last_week_entries(db_client).await?;
+    let result_entries = find_last_week_entries(&state).await?;
 
     return Ok((StatusCode::OK, Json(json!(result_entries))));
 }
 
-pub async fn find_last_week_entries(db_client: Client) -> AResult<Vec<ProtoWithEntries>> {
-    let active_ep = EntryProto::ddb_list_active(db_client.clone()).await?;
+pub async fn find_last_week_entries(state: &AppState) -> AResult<Vec<ProtoWithEntries>> {
+    let active_ep = EntryProto::ddb_list_active(state).await?;
     let week_ago = get_date_x_days_ago(7);
     let mut result_entries: Vec<ProtoWithEntries> = Vec::new();
 
     for entry_proto in active_ep {
-        let t: Vec<Entry> =
-            Entry::ddb_query(db_client.clone(), entry_proto.sk.clone(), week_ago.clone()).await?;
+        let t: Vec<Entry> = Entry::ddb_query(&state, &entry_proto.sk, &week_ago).await?;
         result_entries.push(ProtoWithEntries {
             proto: entry_proto,
             entries: t,
@@ -62,10 +59,10 @@ struct FindEntriesResult {
 }
 
 async fn find_by_date(
-    Extension(db_client): Extension<Client>,
+    State(state): State<AppState>,
     Path(date): Path<String>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let active_ep = EntryProto::ddb_list_active(db_client.clone()).await?;
+    let active_ep = EntryProto::ddb_list_active(&state).await?;
     let v: Vec<HashMap<String, AttributeValue>> = active_ep
         .iter()
         .map(|ep| {
@@ -76,16 +73,23 @@ async fn find_by_date(
         })
         .collect();
 
-    let ddb_res = db_client
+    let ddb_res = state
+        .dynamodb_client
         .batch_get_item()
         .request_items(
-            TABLE_NAME,
+            &state.table_name,
             KeysAndAttributes::builder().set_keys(Some(v)).build()?,
         )
         .send()
         .await?;
 
-    let entries: Vec<Entry> = from_items(ddb_res.responses.unwrap().remove(TABLE_NAME).unwrap())?;
+    let entries: Vec<Entry> = from_items(
+        ddb_res
+            .responses
+            .unwrap()
+            .remove(&state.table_name)
+            .unwrap(),
+    )?;
 
     Ok((
         StatusCode::OK,
@@ -94,31 +98,31 @@ async fn find_by_date(
 }
 
 async fn query(
-    Extension(db_client): Extension<Client>,
+    State(state): State<AppState>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<(StatusCode, Json<Value>)> {
-    let response = Entry::ddb_query(db_client, pk, sk).await?;
+    let response = Entry::ddb_query(&state, pk, sk).await?;
     return Ok((StatusCode::OK, Json(json!(response))));
 }
 
 async fn put_item(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Json(payload): Json<EntryFC>,
 ) -> AResult<StatusCode> {
-    Entry::ddb_put_item(client, payload).await?;
+    Entry::ddb_put_item(&state, payload).await?;
     Ok(StatusCode::CREATED)
 }
 
 async fn delete_entry(
-    Extension(client): Extension<Client>,
+    State(state): State<AppState>,
     Path((pk, sk)): Path<(String, String)>,
 ) -> AResult<StatusCode> {
-    let query_res = Entry::ddb_query(client.clone(), pk.clone(), sk.clone()).await?;
+    let query_res = Entry::ddb_query(&state, &pk, &sk).await?;
 
     if query_res.is_empty() {
         return Ok(StatusCode::NOT_FOUND);
     }
 
-    Entry::ddb_delete(client, pk, sk).await?;
+    Entry::ddb_delete(&state, pk, sk).await?;
     Ok(StatusCode::NO_CONTENT)
 }
